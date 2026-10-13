@@ -35,7 +35,6 @@ import androidx.core.content.ContextCompat;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -91,22 +90,6 @@ public class ExplorerActivity extends AppCompatActivity {
         renameButton.setOnClickListener(v -> renameSelected());
         deleteButton.setOnClickListener(v -> confirmDeleteSelected());
         closeButton.setOnClickListener(v -> finish());
-
-        mediaGrid.setOnItemClickListener((parent, view, position, id) -> {
-            MediaItem item = items.get(position);
-            if (!selected.isEmpty()) {
-                toggleSelection(item.uri);
-                adapter.notifyDataSetChanged();
-            } else {
-                openPreview(item);
-            }
-        });
-
-        mediaGrid.setOnItemLongClickListener((parent, view, position, id) -> {
-            toggleSelection(items.get(position).uri);
-            adapter.notifyDataSetChanged();
-            return true;
-        });
 
         if (hasLegacyReadPermission()) {
             loadMedia();
@@ -218,6 +201,21 @@ public class ExplorerActivity extends AppCompatActivity {
         }
     }
 
+    private void handleItemTap(MediaItem item) {
+        if (!selected.isEmpty()) {
+            toggleSelection(item.uri);
+            adapter.notifyDataSetChanged();
+        } else {
+            openPreview(item);
+        }
+    }
+
+    private boolean handleItemLongPress(MediaItem item) {
+        toggleSelection(item.uri);
+        adapter.notifyDataSetChanged();
+        return true;
+    }
+
     private void selectAll() {
         selected.clear();
         for (MediaItem item : items) selected.add(item.uri);
@@ -238,14 +236,12 @@ public class ExplorerActivity extends AppCompatActivity {
     }
 
     private void updateSelectionStatus() {
-        countText.setText(
-                String.format(
-                        Locale.US,
-                        "ทั้งหมด %d รายการ • เลือก %d รายการ",
-                        items.size(),
-                        selected.size()
-                )
-        );
+        countText.setText(String.format(
+                Locale.US,
+                "ทั้งหมด %d รายการ • เลือก %d รายการ",
+                items.size(),
+                selected.size()
+        ));
         shareButton.setEnabled(!selected.isEmpty());
         deleteButton.setEnabled(!selected.isEmpty());
         renameButton.setEnabled(selected.size() == 1);
@@ -282,14 +278,16 @@ public class ExplorerActivity extends AppCompatActivity {
         input.setText(stripExtension(item.name));
         input.setSelection(input.length());
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("เปลี่ยนชื่อไฟล์")
                 .setView(input)
-                .setPositiveButton("บันทึก", (dialog, which) -> {
+                .setPositiveButton("บันทึก", (d, which) -> {
                     String base = sanitizeFileName(input.getText().toString());
-                    if (base.isEmpty()) return;
-                    String extension = extensionOf(item.name);
-                    String newName = base + extension;
+                    if (base.isEmpty()) {
+                        Toast.makeText(this, "กรุณาใส่ชื่อไฟล์", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String newName = base + extensionOf(item.name);
                     try {
                         ContentValues values = new ContentValues();
                         values.put(MediaStore.MediaColumns.DISPLAY_NAME, newName);
@@ -305,51 +303,50 @@ public class ExplorerActivity extends AppCompatActivity {
                     }
                 })
                 .setNegativeButton("ยกเลิก", null)
-                .show();
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFF1565C0);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFF555555);
+        });
+        dialog.show();
     }
 
     private void confirmDeleteSelected() {
         if (selected.isEmpty()) return;
         int count = selected.size();
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("ลบไฟล์")
                 .setMessage("ลบ " + count + " รายการที่เลือกหรือไม่?")
-                .setPositiveButton("ลบ", (dialog, which) -> deleteSelected())
+                .setPositiveButton("ลบ", (d, which) -> deleteSelected())
                 .setNegativeButton("ยกเลิก", null)
-                .show();
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFFD32F2F);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFF555555);
+        });
+        dialog.show();
     }
 
     private void deleteSelected() {
         List<Uri> targets = new ArrayList<>(selected);
         new Thread(() -> {
             int deleted = 0;
-            String error = null;
             for (Uri uri : targets) {
                 try {
                     if (getContentResolver().delete(uri, null, null) > 0) deleted++;
-                } catch (Exception e) {
-                    error = e.getMessage();
+                } catch (Exception ignored) {
                 }
             }
             int finalDeleted = deleted;
-            String finalError = error;
             runOnUiThread(() -> {
-                Toast.makeText(
-                        this,
-                        finalError == null
-                                ? "ลบแล้ว " + finalDeleted + " รายการ"
-                                : "ลบได้ " + finalDeleted + " รายการ • บางไฟล์ลบไม่สำเร็จ",
-                        Toast.LENGTH_LONG
-                ).show();
+                Toast.makeText(this, "ลบแล้ว " + finalDeleted + " รายการ", Toast.LENGTH_LONG).show();
                 loadMedia();
             });
         }).start();
     }
 
     private MediaItem findItem(Uri uri) {
-        for (MediaItem item : items) {
-            if (item.uri.equals(uri)) return item;
-        }
+        for (MediaItem item : items) if (item.uri.equals(uri)) return item;
         return null;
     }
 
@@ -397,20 +394,9 @@ public class ExplorerActivity extends AppCompatActivity {
     private final class MediaAdapter extends BaseAdapter {
         private final LruCache<String, Bitmap> thumbnailCache = new LruCache<>(32);
 
-        @Override
-        public int getCount() {
-            return items.size();
-        }
-
-        @Override
-        public Object getItem(int position) {
-            return items.get(position);
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return items.get(position).id;
-        }
+        @Override public int getCount() { return items.size(); }
+        @Override public Object getItem(int position) { return items.get(position); }
+        @Override public long getItemId(int position) { return items.get(position).id; }
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
@@ -426,8 +412,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 badge = (TextView) root.findViewWithTag("badge");
             } else {
                 root = new FrameLayout(ExplorerActivity.this);
-                int height = dp(150);
-                root.setLayoutParams(new GridView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
+                root.setLayoutParams(new GridView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
 
                 image = new ImageView(ExplorerActivity.this);
                 image.setTag("image");
@@ -457,8 +442,19 @@ public class ExplorerActivity extends AppCompatActivity {
             }
 
             MediaItem item = items.get(position);
+
+            View.OnClickListener previewClick = v -> handleItemTap(item);
+            View.OnLongClickListener selectLong = v -> handleItemLongPress(item);
+            root.setOnClickListener(previewClick);
+            root.setOnLongClickListener(selectLong);
+            image.setOnClickListener(previewClick);
+            image.setOnLongClickListener(selectLong);
+            badge.setOnClickListener(previewClick);
+            badge.setOnLongClickListener(selectLong);
+
             check.setOnCheckedChangeListener(null);
             check.setChecked(selected.contains(item.uri));
+            check.setFocusable(false);
             check.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked) selected.add(item.uri);
                 else selected.remove(item.uri);
@@ -487,17 +483,13 @@ public class ExplorerActivity extends AppCompatActivity {
                         bitmap = getContentResolver().loadThumbnail(item.uri, new Size(360, 360), null);
                     } else if (item.video) {
                         bitmap = MediaStore.Video.Thumbnails.getThumbnail(
-                                getContentResolver(),
-                                item.id,
-                                MediaStore.Video.Thumbnails.MINI_KIND,
-                                null
+                                getContentResolver(), item.id,
+                                MediaStore.Video.Thumbnails.MINI_KIND, null
                         );
                     } else {
                         bitmap = MediaStore.Images.Thumbnails.getThumbnail(
-                                getContentResolver(),
-                                item.id,
-                                MediaStore.Images.Thumbnails.MINI_KIND,
-                                null
+                                getContentResolver(), item.id,
+                                MediaStore.Images.Thumbnails.MINI_KIND, null
                         );
                     }
                 } catch (Exception ignored) {
@@ -507,9 +499,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 if (finalBitmap != null) thumbnailCache.put(key, finalBitmap);
                 runOnUiThread(() -> {
                     Object tag = target.getTag(R.id.thumbnail_uri_tag);
-                    if (key.equals(tag) && finalBitmap != null) {
-                        target.setImageBitmap(finalBitmap);
-                    }
+                    if (key.equals(tag) && finalBitmap != null) target.setImageBitmap(finalBitmap);
                 });
             });
         }
