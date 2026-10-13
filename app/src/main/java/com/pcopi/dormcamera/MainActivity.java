@@ -3,6 +3,7 @@ package com.pcopi.dormcamera;
 import android.Manifest;
 import android.content.ContentValues;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.media.MediaScannerConnection;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,6 +50,7 @@ import java.util.concurrent.Executor;
 public class MainActivity extends AppCompatActivity {
     private static final int REQ_PERMISSIONS = 1001;
     private static final int REQ_AUDIO = 1002;
+    private static final int REQ_LOCATION = 1003;
     private static final String PUBLIC_FOLDER = "DormCamera";
 
     private PreviewView previewView;
@@ -71,6 +73,10 @@ public class MainActivity extends AppCompatActivity {
     private boolean startVideoAfterAudioPermission = false;
     private File currentLegacyVideoFile;
 
+    private LocationHelper locationHelper;
+    private String gpsStatus = "GPS: กำลังตรวจสอบ";
+    private Location currentCaptureLocation;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -85,6 +91,8 @@ public class MainActivity extends AppCompatActivity {
         zoomOutButton = findViewById(R.id.zoomOutButton);
         zoomResetButton = findViewById(R.id.zoomResetButton);
         zoomInButton = findViewById(R.id.zoomInButton);
+
+        locationHelper = new LocationHelper(this);
 
         setCameraControlsEnabled(false);
 
@@ -117,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (hasRequiredPermissions()) {
             startCamera();
+            startLocationSetup();
         } else {
             ActivityCompat.requestPermissions(this, requiredPermissions(), REQ_PERMISSIONS);
         }
@@ -153,6 +162,72 @@ public class MainActivity extends AppCompatActivity {
     private boolean hasAudioPermission() {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasLocationPermission() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void startLocationSetup() {
+        if (hasLocationPermission()) {
+            refreshLocation();
+            return;
+        }
+
+        gpsStatus = "GPS: รออนุญาต";
+        updateCameraStatus();
+        ActivityCompat.requestPermissions(
+                this,
+                new String[]{
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                },
+                REQ_LOCATION
+        );
+    }
+
+    private void refreshLocation() {
+        if (!hasLocationPermission()) {
+            gpsStatus = "GPS: ไม่อนุญาต";
+            updateCameraStatus();
+            return;
+        }
+
+        gpsStatus = "GPS: กำลังหาพิกัด";
+        updateCameraStatus();
+
+        locationHelper.refresh(new LocationHelper.Callback() {
+            @Override
+            public void onLocation(@NonNull Location location) {
+                gpsStatus = location.hasAccuracy()
+                        ? String.format(Locale.US, "GPS: พร้อม ±%.0f ม.", location.getAccuracy())
+                        : "GPS: พร้อม";
+                updateCameraStatus();
+            }
+
+            @Override
+            public void onUnavailable(@NonNull String reason) {
+                gpsStatus = "GPS: " + reason;
+                updateCameraStatus();
+            }
+        });
+    }
+
+    private Location prepareLocationForCapture() {
+        if (!hasLocationPermission()) {
+            gpsStatus = "GPS: ไม่อนุญาต";
+            return null;
+        }
+
+        Location location = locationHelper.getBestLocation();
+        if (location == null || LocationHelper.isStale(location)) {
+            refreshLocation();
+            return null;
+        }
+        return location;
     }
 
     private void startCamera() {
@@ -250,15 +325,9 @@ public class MainActivity extends AppCompatActivity {
                 max
         ));
 
-        if (activeRecording == null) {
-            zoomOutButton.setEnabled(zoom > min + 0.01f);
-            zoomInButton.setEnabled(zoom < max - 0.01f);
-            zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
-        } else {
-            zoomOutButton.setEnabled(zoom > min + 0.01f);
-            zoomInButton.setEnabled(zoom < max - 0.01f);
-            zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
-        }
+        zoomOutButton.setEnabled(zoom > min + 0.01f);
+        zoomInButton.setEnabled(zoom < max - 0.01f);
+        zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
     }
 
     private void multiplyZoom(float factor) {
@@ -306,6 +375,10 @@ public class MainActivity extends AppCompatActivity {
                 .format(new Date());
         String fileName = "IMG_" + stamp + ".jpg";
 
+        currentCaptureLocation = prepareLocationForCapture();
+        ImageCapture.Metadata metadata = new ImageCapture.Metadata();
+        metadata.setLocation(currentCaptureLocation);
+
         final File legacyPhotoFile;
         ImageCapture.OutputFileOptions options;
 
@@ -323,7 +396,7 @@ public class MainActivity extends AppCompatActivity {
                     getContentResolver(),
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     values
-            ).build();
+            ).setMetadata(metadata).build();
         } else {
             File picturesDir = Environment.getExternalStoragePublicDirectory(
                     Environment.DIRECTORY_PICTURES
@@ -334,13 +407,20 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             legacyPhotoFile = new File(dormDir, fileName);
-            options = new ImageCapture.OutputFileOptions.Builder(legacyPhotoFile).build();
+            options = new ImageCapture.OutputFileOptions.Builder(legacyPhotoFile)
+                    .setMetadata(metadata)
+                    .build();
         }
 
         if (previewView.getDisplay() != null) {
             imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
         }
-        statusText.setText("กำลังบันทึกภาพลง Pictures/DormCamera...");
+
+        boolean hasGps = currentCaptureLocation != null;
+        statusText.setText(
+                "กำลังบันทึกภาพลง Pictures/DormCamera..."
+                        + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
+        );
         captureButton.setEnabled(false);
 
         imageCapture.takePicture(
@@ -360,10 +440,15 @@ public class MainActivity extends AppCompatActivity {
                             );
                         }
 
-                        statusText.setText("บันทึกภาพแล้ว • Pictures/DormCamera");
+                        statusText.setText(
+                                "บันทึกภาพแล้ว • Pictures/DormCamera"
+                                        + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
+                        );
                         Toast.makeText(
                                 MainActivity.this,
-                                "บันทึกภาพแล้วใน Pictures/DormCamera\n" + fileName,
+                                "บันทึกภาพแล้วใน Pictures/DormCamera\n"
+                                        + fileName
+                                        + (hasGps ? "\nGPS metadata: บันทึกแล้ว" : "\nGPS metadata: ไม่มีพิกัด"),
                                 Toast.LENGTH_LONG
                         ).show();
                         statusText.postDelayed(() -> updateCameraStatus(), 1800L);
@@ -411,6 +496,9 @@ public class MainActivity extends AppCompatActivity {
                 .format(new Date());
         String fileName = "VID_" + stamp + ".mp4";
 
+        currentCaptureLocation = prepareLocationForCapture();
+        Location videoLocation = currentCaptureLocation;
+
         PendingRecording pendingRecording;
         currentLegacyVideoFile = null;
 
@@ -423,12 +511,15 @@ public class MainActivity extends AppCompatActivity {
                     Environment.DIRECTORY_MOVIES + File.separator + PUBLIC_FOLDER
             );
 
-            MediaStoreOutputOptions outputOptions = new MediaStoreOutputOptions.Builder(
+            MediaStoreOutputOptions.Builder builder = new MediaStoreOutputOptions.Builder(
                     getContentResolver(),
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-            ).setContentValues(values).build();
+            ).setContentValues(values);
 
-            pendingRecording = videoCapture.getOutput().prepareRecording(this, outputOptions);
+            if (videoLocation != null) {
+                builder.setLocation(videoLocation);
+            }
+            pendingRecording = videoCapture.getOutput().prepareRecording(this, builder.build());
         } else {
             File moviesDir = Environment.getExternalStoragePublicDirectory(
                     Environment.DIRECTORY_MOVIES
@@ -439,8 +530,11 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             currentLegacyVideoFile = new File(dormDir, fileName);
-            FileOutputOptions outputOptions = new FileOutputOptions.Builder(currentLegacyVideoFile).build();
-            pendingRecording = videoCapture.getOutput().prepareRecording(this, outputOptions);
+            FileOutputOptions.Builder builder = new FileOutputOptions.Builder(currentLegacyVideoFile);
+            if (videoLocation != null) {
+                builder.setLocation(videoLocation);
+            }
+            pendingRecording = videoCapture.getOutput().prepareRecording(this, builder.build());
         }
 
         if (hasAudioPermission()) {
@@ -454,16 +548,22 @@ public class MainActivity extends AppCompatActivity {
         videoButton.setEnabled(true);
         videoButton.setText("หยุดวิดีโอ");
 
+        final boolean hasGps = videoLocation != null;
         activeRecording = pendingRecording.start(
                 ContextCompat.getMainExecutor(this),
-                event -> handleVideoEvent(event, fileName)
+                event -> handleVideoEvent(event, fileName, hasGps)
         );
     }
 
-    private void handleVideoEvent(VideoRecordEvent event, String fileName) {
+    private void handleVideoEvent(VideoRecordEvent event, String fileName, boolean hasGps) {
         if (event instanceof VideoRecordEvent.Start) {
             String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
-            statusText.setText("กำลังบันทึกวิดีโอ • " + side + " • 1080p/720p • Movies/DormCamera");
+            statusText.setText(
+                    "กำลังบันทึกวิดีโอ • "
+                            + side
+                            + " • 1080p/720p • Movies/DormCamera"
+                            + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
+            );
             return;
         }
 
@@ -501,10 +601,15 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
 
-            statusText.setText("บันทึกวิดีโอแล้ว • Movies/DormCamera");
+            statusText.setText(
+                    "บันทึกวิดีโอแล้ว • Movies/DormCamera"
+                            + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
+            );
             Toast.makeText(
                     this,
-                    "บันทึกวิดีโอแล้วใน Movies/DormCamera\n" + fileName,
+                    "บันทึกวิดีโอแล้วใน Movies/DormCamera\n"
+                            + fileName
+                            + (hasGps ? "\nGPS metadata: บันทึกแล้ว" : "\nGPS metadata: ไม่มีพิกัด"),
                     Toast.LENGTH_LONG
             ).show();
             statusText.postDelayed(this::updateCameraStatus, 1800L);
@@ -512,9 +617,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateCameraStatus() {
+        if (statusText == null) return;
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
         statusText.setText(
                 "Dorm Camera • " + side
+                        + " • " + gpsStatus
                         + " • ภาพ: Pictures/DormCamera"
                         + " • วิดีโอ: Movies/DormCamera"
         );
@@ -536,6 +643,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQ_PERMISSIONS) {
             if (hasRequiredPermissions()) {
                 startCamera();
+                startLocationSetup();
             } else {
                 showError("ต้องอนุญาตสิทธิ์กล้องและสิทธิ์บันทึกก่อนใช้งาน");
             }
@@ -552,6 +660,32 @@ public class MainActivity extends AppCompatActivity {
                 ).show();
             }
             startVideoRecording();
+            return;
+        }
+
+        if (requestCode == REQ_LOCATION) {
+            if (hasLocationPermission()) {
+                refreshLocation();
+            } else {
+                gpsStatus = "GPS: ไม่อนุญาต (ยังถ่ายได้)";
+                updateCameraStatus();
+                Toast.makeText(
+                        this,
+                        "ไม่ได้อนุญาตตำแหน่ง — ภาพและวิดีโอยังถ่ายได้ แต่จะไม่มี GPS metadata",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (locationHelper != null && hasLocationPermission()) {
+            Location location = locationHelper.getBestLocation();
+            if (location == null || LocationHelper.isStale(location)) {
+                refreshLocation();
+            }
         }
     }
 
