@@ -24,6 +24,54 @@
         app:implementationMode="performance"
         app:scaleType="fillCenter" />
 
+    <TextView
+        android:id="@+id/zoomText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="7dp"
+        android:paddingBottom="5dp"
+        android:text="ซูม 1.0x • บีบนิ้วบนภาพเพื่อซูม"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:background="#111111" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:background="#111111">
+
+        <Button
+            android:id="@+id/zoomOutButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:text="− ซูม" />
+
+        <Button
+            android:id="@+id/zoomResetButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="3dp"
+            android:text="1×" />
+
+        <Button
+            android:id="@+id/zoomInButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="+ ซูม" />
+    </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
