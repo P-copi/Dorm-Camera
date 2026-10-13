@@ -67,6 +67,10 @@ public class ZoomImageView extends AppCompatImageView {
         });
     }
 
+    public boolean isZoomed() {
+        return userScale > 1.05f;
+    }
+
     public void resetZoom() {
         Drawable d = getDrawable();
         if (d == null || getWidth() <= 0 || getHeight() <= 0) return;
