@@ -2,19 +2,23 @@ package com.pcopi.dormcamera;
 
 import android.Manifest;
 import android.content.ContentValues;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.ScaleGestureDetector;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.TextView;
+import android.widget.EditText;
 import android.widget.Toast;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
@@ -51,7 +55,6 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_PERMISSIONS = 1001;
     private static final int REQ_AUDIO = 1002;
     private static final int REQ_LOCATION = 1003;
-    private static final String PUBLIC_FOLDER = "DormCamera";
 
     private PreviewView previewView;
     private TextView statusText;
@@ -62,6 +65,8 @@ public class MainActivity extends AppCompatActivity {
     private Button zoomOutButton;
     private Button zoomResetButton;
     private Button zoomInButton;
+    private Button folderButton;
+    private Button explorerButton;
 
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
@@ -76,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
     private LocationHelper locationHelper;
     private String gpsStatus = "GPS: กำลังตรวจสอบ";
     private Location currentCaptureLocation;
+    private FolderStore folderStore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,8 +97,11 @@ public class MainActivity extends AppCompatActivity {
         zoomOutButton = findViewById(R.id.zoomOutButton);
         zoomResetButton = findViewById(R.id.zoomResetButton);
         zoomInButton = findViewById(R.id.zoomInButton);
+        folderButton = findViewById(R.id.folderButton);
+        explorerButton = findViewById(R.id.explorerButton);
 
         locationHelper = new LocationHelper(this);
+        folderStore = new FolderStore(this);
 
         setCameraControlsEnabled(false);
 
@@ -102,6 +111,8 @@ public class MainActivity extends AppCompatActivity {
         zoomOutButton.setOnClickListener(v -> multiplyZoom(0.8f));
         zoomResetButton.setOnClickListener(v -> setZoomRatio(1.0f));
         zoomInButton.setOnClickListener(v -> multiplyZoom(1.25f));
+        folderButton.setOnClickListener(v -> showFolderMenu());
+        explorerButton.setOnClickListener(v -> openExplorer());
 
         scaleGestureDetector = new ScaleGestureDetector(
                 this,
@@ -138,6 +149,8 @@ public class MainActivity extends AppCompatActivity {
         zoomOutButton.setEnabled(enabled);
         zoomResetButton.setEnabled(enabled);
         zoomInButton.setEnabled(enabled);
+        folderButton.setEnabled(enabled);
+        explorerButton.setEnabled(enabled);
     }
 
     private String[] requiredPermissions() {
@@ -145,6 +158,7 @@ public class MainActivity extends AppCompatActivity {
         permissions.add(Manifest.permission.CAMERA);
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
         }
         return permissions.toArray(new String[0]);
     }
@@ -246,8 +260,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void bindCameraUseCases() {
-        if (cameraProvider == null) return;
-        if (activeRecording != null) return;
+        if (cameraProvider == null || activeRecording != null) return;
 
         CameraSelector selector = new CameraSelector.Builder()
                 .requireLensFacing(lensFacing)
@@ -342,9 +355,10 @@ public class MainActivity extends AppCompatActivity {
         ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
         if (state == null) return;
 
-        float min = state.getMinZoomRatio();
-        float max = state.getMaxZoomRatio();
-        float safeRatio = Math.max(min, Math.min(max, requestedRatio));
+        float safeRatio = Math.max(
+                state.getMinZoomRatio(),
+                Math.min(state.getMaxZoomRatio(), requestedRatio)
+        );
         activeCamera.getCameraControl().setZoomRatio(safeRatio);
     }
 
@@ -374,6 +388,9 @@ public class MainActivity extends AppCompatActivity {
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
                 .format(new Date());
         String fileName = "IMG_" + stamp + ".jpg";
+        String folder = folderStore.getCurrentFolder();
+        String relativePath = FolderStore.pictureRelativePath(folder);
+        String displayPath = relativePath.substring(0, relativePath.length() - 1);
 
         currentCaptureLocation = prepareLocationForCapture();
         ImageCapture.Metadata metadata = new ImageCapture.Metadata();
@@ -387,10 +404,7 @@ public class MainActivity extends AppCompatActivity {
             ContentValues values = new ContentValues();
             values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-            values.put(
-                    MediaStore.Images.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_PICTURES + File.separator + PUBLIC_FOLDER
-            );
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, relativePath);
 
             options = new ImageCapture.OutputFileOptions.Builder(
                     getContentResolver(),
@@ -398,12 +412,9 @@ public class MainActivity extends AppCompatActivity {
                     values
             ).setMetadata(metadata).build();
         } else {
-            File picturesDir = Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_PICTURES
-            );
-            File dormDir = new File(picturesDir, PUBLIC_FOLDER);
+            File dormDir = FolderStore.legacyPictureDir(folder);
             if (!dormDir.exists() && !dormDir.mkdirs()) {
-                showError("สร้างโฟลเดอร์ Pictures/DormCamera ไม่สำเร็จ");
+                showError("สร้างโฟลเดอร์ภาพไม่สำเร็จ");
                 return;
             }
             legacyPhotoFile = new File(dormDir, fileName);
@@ -417,10 +428,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         boolean hasGps = currentCaptureLocation != null;
-        statusText.setText(
-                "กำลังบันทึกภาพลง Pictures/DormCamera..."
-                        + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
-        );
+        statusText.setText("กำลังบันทึกภาพ • " + displayPath + (hasGps ? " • GPS ✓" : " • ไม่มี GPS"));
         captureButton.setEnabled(false);
 
         imageCapture.takePicture(
@@ -440,18 +448,13 @@ public class MainActivity extends AppCompatActivity {
                             );
                         }
 
-                        statusText.setText(
-                                "บันทึกภาพแล้ว • Pictures/DormCamera"
-                                        + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
-                        );
+                        statusText.setText("บันทึกภาพแล้ว • " + displayPath + (hasGps ? " • GPS ✓" : ""));
                         Toast.makeText(
                                 MainActivity.this,
-                                "บันทึกภาพแล้วใน Pictures/DormCamera\n"
-                                        + fileName
-                                        + (hasGps ? "\nGPS metadata: บันทึกแล้ว" : "\nGPS metadata: ไม่มีพิกัด"),
+                                "บันทึกภาพแล้ว\n" + displayPath + "\n" + fileName,
                                 Toast.LENGTH_LONG
                         ).show();
-                        statusText.postDelayed(() -> updateCameraStatus(), 1800L);
+                        statusText.postDelayed(() -> updateCameraStatus(), 1500L);
                     }
 
                     @Override
@@ -495,6 +498,9 @@ public class MainActivity extends AppCompatActivity {
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
                 .format(new Date());
         String fileName = "VID_" + stamp + ".mp4";
+        String folder = folderStore.getCurrentFolder();
+        String relativePath = FolderStore.videoRelativePath(folder);
+        String displayPath = relativePath.substring(0, relativePath.length() - 1);
 
         currentCaptureLocation = prepareLocationForCapture();
         Location videoLocation = currentCaptureLocation;
@@ -506,64 +512,49 @@ public class MainActivity extends AppCompatActivity {
             ContentValues values = new ContentValues();
             values.put(MediaStore.Video.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-            values.put(
-                    MediaStore.Video.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_MOVIES + File.separator + PUBLIC_FOLDER
-            );
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, relativePath);
 
             MediaStoreOutputOptions.Builder builder = new MediaStoreOutputOptions.Builder(
                     getContentResolver(),
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             ).setContentValues(values);
 
-            if (videoLocation != null) {
-                builder.setLocation(videoLocation);
-            }
+            if (videoLocation != null) builder.setLocation(videoLocation);
             pendingRecording = videoCapture.getOutput().prepareRecording(this, builder.build());
         } else {
-            File moviesDir = Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_MOVIES
-            );
-            File dormDir = new File(moviesDir, PUBLIC_FOLDER);
+            File dormDir = FolderStore.legacyVideoDir(folder);
             if (!dormDir.exists() && !dormDir.mkdirs()) {
-                showError("สร้างโฟลเดอร์ Movies/DormCamera ไม่สำเร็จ");
+                showError("สร้างโฟลเดอร์วิดีโอไม่สำเร็จ");
                 return;
             }
             currentLegacyVideoFile = new File(dormDir, fileName);
             FileOutputOptions.Builder builder = new FileOutputOptions.Builder(currentLegacyVideoFile);
-            if (videoLocation != null) {
-                builder.setLocation(videoLocation);
-            }
+            if (videoLocation != null) builder.setLocation(videoLocation);
             pendingRecording = videoCapture.getOutput().prepareRecording(this, builder.build());
         }
 
         if (hasAudioPermission()) {
             pendingRecording = pendingRecording.withAudioEnabled();
-        } else {
-            Toast.makeText(this, "บันทึกวิดีโอแบบไม่มีเสียง", Toast.LENGTH_SHORT).show();
         }
 
         captureButton.setEnabled(false);
         switchButton.setEnabled(false);
+        folderButton.setEnabled(false);
+        explorerButton.setEnabled(false);
         videoButton.setEnabled(true);
         videoButton.setText("หยุดวิดีโอ");
 
         final boolean hasGps = videoLocation != null;
         activeRecording = pendingRecording.start(
                 ContextCompat.getMainExecutor(this),
-                event -> handleVideoEvent(event, fileName, hasGps)
+                event -> handleVideoEvent(event, fileName, displayPath, hasGps)
         );
     }
 
-    private void handleVideoEvent(VideoRecordEvent event, String fileName, boolean hasGps) {
+    private void handleVideoEvent(VideoRecordEvent event, String fileName, String displayPath, boolean hasGps) {
         if (event instanceof VideoRecordEvent.Start) {
             String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
-            statusText.setText(
-                    "กำลังบันทึกวิดีโอ • "
-                            + side
-                            + " • 1080p/720p • Movies/DormCamera"
-                            + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
-            );
+            statusText.setText("กำลังบันทึกวิดีโอ • " + side + " • " + displayPath + (hasGps ? " • GPS ✓" : ""));
             return;
         }
 
@@ -581,6 +572,8 @@ public class MainActivity extends AppCompatActivity {
             videoButton.setText("วิดีโอ");
             captureButton.setEnabled(true);
             switchButton.setEnabled(true);
+            folderButton.setEnabled(true);
+            explorerButton.setEnabled(true);
 
             ZoomState state = activeCamera != null
                     ? activeCamera.getCameraInfo().getZoomState().getValue()
@@ -601,34 +594,227 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
 
-            statusText.setText(
-                    "บันทึกวิดีโอแล้ว • Movies/DormCamera"
-                            + (hasGps ? " • GPS ✓" : " • ไม่มี GPS")
-            );
+            statusText.setText("บันทึกวิดีโอแล้ว • " + displayPath + (hasGps ? " • GPS ✓" : ""));
             Toast.makeText(
                     this,
-                    "บันทึกวิดีโอแล้วใน Movies/DormCamera\n"
-                            + fileName
-                            + (hasGps ? "\nGPS metadata: บันทึกแล้ว" : "\nGPS metadata: ไม่มีพิกัด"),
+                    "บันทึกวิดีโอแล้ว\n" + displayPath + "\n" + fileName,
                     Toast.LENGTH_LONG
             ).show();
-            statusText.postDelayed(this::updateCameraStatus, 1800L);
+            statusText.postDelayed(this::updateCameraStatus, 1500L);
         }
     }
 
+    private void showFolderMenu() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดวิดีโอก่อนจัดการโฟลเดอร์", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        boolean locked = folderStore.isLocked();
+        String current = FolderStore.displayName(folderStore.getCurrentFolder());
+        String lockAction = locked ? "ปลดล็อกโฟลเดอร์" : "ล็อกโฟลเดอร์ปัจจุบัน";
+        String[] choices = new String[]{
+                "เลือกโฟลเดอร์",
+                "สร้างโฟลเดอร์ใหม่",
+                "เปลี่ยนชื่อโฟลเดอร์ปัจจุบัน",
+                lockAction
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("โฟลเดอร์บันทึก: " + current + (locked ? " 🔒" : ""))
+                .setItems(choices, (dialog, which) -> {
+                    if (which == 0) showSelectFolderDialog();
+                    else if (which == 1) showCreateFolderDialog();
+                    else if (which == 2) showRenameFolderDialog();
+                    else toggleFolderLock();
+                })
+                .setNegativeButton("ปิด", null)
+                .show();
+    }
+
+    private void showSelectFolderDialog() {
+        if (folderStore.isLocked()) {
+            Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        List<String> folders = folderStore.getKnownFolders();
+        String[] labels = new String[folders.size()];
+        int checked = 0;
+        String current = folderStore.getCurrentFolder();
+        for (int i = 0; i < folders.size(); i++) {
+            labels[i] = FolderStore.displayName(folders.get(i));
+            if (folders.get(i).equals(current)) checked = i;
+        }
+
+        final int[] selected = new int[]{checked};
+        new AlertDialog.Builder(this)
+                .setTitle("เลือกโฟลเดอร์บันทึก")
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> selected[0] = which)
+                .setPositiveButton("ใช้โฟลเดอร์นี้", (dialog, which) -> {
+                    folderStore.setCurrentFolder(folders.get(selected[0]));
+                    updateCameraStatus();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
+    private void showCreateFolderDialog() {
+        if (folderStore.isLocked()) {
+            Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        EditText input = new EditText(this);
+        input.setHint("เช่น ห้อง101 หรือ งานวันที่13");
+        input.setSingleLine(true);
+
+        new AlertDialog.Builder(this)
+                .setTitle("สร้างโฟลเดอร์ใหม่")
+                .setView(input)
+                .setPositiveButton("สร้างและใช้", (dialog, which) -> {
+                    String name = FolderStore.normalize(input.getText().toString());
+                    if (name.isEmpty()) {
+                        Toast.makeText(this, "กรุณาใส่ชื่อโฟลเดอร์", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    folderStore.addFolder(name);
+                    folderStore.setCurrentFolder(name);
+                    updateCameraStatus();
+                    Toast.makeText(this, "ใช้โฟลเดอร์: " + name, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
+    private void showRenameFolderDialog() {
+        if (folderStore.isLocked()) {
+            Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        String oldName = folderStore.getCurrentFolder();
+        if (oldName.isEmpty()) {
+            Toast.makeText(this, "โฟลเดอร์หลักเปลี่ยนชื่อไม่ได้ ให้สร้างโฟลเดอร์ใหม่แทน", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(oldName);
+        input.setSelection(input.length());
+
+        new AlertDialog.Builder(this)
+                .setTitle("เปลี่ยนชื่อโฟลเดอร์")
+                .setView(input)
+                .setPositiveButton("เปลี่ยนชื่อ", (dialog, which) -> {
+                    String newName = FolderStore.normalize(input.getText().toString());
+                    if (newName.isEmpty() || newName.equals(oldName)) return;
+                    renameFolderOnStorage(oldName, newName);
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
+    private void renameFolderOnStorage(@NonNull String oldName, @NonNull String newName) {
+        folderButton.setEnabled(false);
+        statusText.setText("กำลังเปลี่ยนชื่อโฟลเดอร์...");
+
+        new Thread(() -> {
+            boolean success;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                success = moveMediaStorePath(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        FolderStore.pictureRelativePath(oldName),
+                        FolderStore.pictureRelativePath(newName)
+                );
+                success = moveMediaStorePath(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        FolderStore.videoRelativePath(oldName),
+                        FolderStore.videoRelativePath(newName)
+                ) && success;
+            } else {
+                success = renameLegacyDir(
+                        FolderStore.legacyPictureDir(oldName),
+                        FolderStore.legacyPictureDir(newName)
+                );
+                success = renameLegacyDir(
+                        FolderStore.legacyVideoDir(oldName),
+                        FolderStore.legacyVideoDir(newName)
+                ) && success;
+            }
+
+            boolean finalSuccess = success;
+            runOnUiThread(() -> {
+                folderButton.setEnabled(true);
+                if (finalSuccess) {
+                    folderStore.renameFolder(oldName, newName);
+                    updateCameraStatus();
+                    Toast.makeText(this, "เปลี่ยนชื่อเป็น " + newName + " แล้ว", Toast.LENGTH_LONG).show();
+                } else {
+                    showError("เปลี่ยนชื่อโฟลเดอร์ไม่สำเร็จ");
+                }
+            });
+        }).start();
+    }
+
+    private boolean moveMediaStorePath(Uri collection, String oldPath, String newPath) {
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, newPath);
+            getContentResolver().update(
+                    collection,
+                    values,
+                    MediaStore.MediaColumns.RELATIVE_PATH + "=?",
+                    new String[]{oldPath}
+            );
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean renameLegacyDir(File oldDir, File newDir) {
+        if (!oldDir.exists()) return true;
+        if (newDir.exists()) return false;
+        File parent = newDir.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) return false;
+        return oldDir.renameTo(newDir);
+    }
+
+    private void toggleFolderLock() {
+        boolean locked = !folderStore.isLocked();
+        folderStore.setLocked(locked);
+        updateCameraStatus();
+        Toast.makeText(
+                this,
+                locked ? "ล็อกโฟลเดอร์บันทึกแล้ว" : "ปลดล็อกโฟลเดอร์แล้ว",
+                Toast.LENGTH_SHORT
+        ).show();
+    }
+
+    private void openExplorer() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดวิดีโอก่อนเปิด Explorer", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        startActivity(new Intent(this, ExplorerActivity.class));
+    }
+
     private void updateCameraStatus() {
-        if (statusText == null) return;
+        if (statusText == null || folderStore == null) return;
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
+        String folder = FolderStore.displayName(folderStore.getCurrentFolder());
+        String lock = folderStore.isLocked() ? " 🔒" : "";
         statusText.setText(
                 "Dorm Camera • " + side
                         + " • " + gpsStatus
-                        + " • ภาพ: Pictures/DormCamera"
-                        + " • วิดีโอ: Movies/DormCamera"
+                        + " • โฟลเดอร์: " + folder + lock
         );
     }
 
     private void showError(String message) {
-        statusText.setText(message);
+        if (statusText != null) statusText.setText(message);
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
 
@@ -669,11 +855,6 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 gpsStatus = "GPS: ไม่อนุญาต (ยังถ่ายได้)";
                 updateCameraStatus();
-                Toast.makeText(
-                        this,
-                        "ไม่ได้อนุญาตตำแหน่ง — ภาพและวิดีโอยังถ่ายได้ แต่จะไม่มี GPS metadata",
-                        Toast.LENGTH_LONG
-                ).show();
             }
         }
     }
@@ -681,19 +862,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateCameraStatus();
         if (locationHelper != null && hasLocationPermission()) {
             Location location = locationHelper.getBestLocation();
-            if (location == null || LocationHelper.isStale(location)) {
-                refreshLocation();
-            }
+            if (location == null || LocationHelper.isStale(location)) refreshLocation();
         }
     }
 
     @Override
     protected void onDestroy() {
-        if (activeRecording != null) {
-            activeRecording.stop();
-        }
+        if (activeRecording != null) activeRecording.stop();
         super.onDestroy();
     }
 }

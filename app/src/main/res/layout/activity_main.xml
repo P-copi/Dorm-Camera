@@ -10,10 +10,10 @@
         android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="10dp"
+        android:padding="9dp"
         android:text="Dorm Camera • พร้อมใช้งาน"
         android:textColor="#FFFFFF"
-        android:textSize="14sp"
+        android:textSize="13sp"
         android:background="#000000" />
 
     <androidx.camera.view.PreviewView
@@ -29,11 +29,11 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:paddingTop="7dp"
-        android:paddingBottom="5dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="4dp"
         android:text="ซูม 1.0x • บีบนิ้วบนภาพเพื่อซูม"
         android:textColor="#FFFFFF"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:background="#111111" />
 
     <LinearLayout
@@ -41,34 +41,34 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="8dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="5dp"
         android:background="#111111">
 
         <Button
             android:id="@+id/zoomOutButton"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="44dp"
             android:layout_weight="1"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="4dp"
             android:text="− ซูม" />
 
         <Button
             android:id="@+id/zoomResetButton"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="44dp"
             android:layout_weight="1"
-            android:layout_marginStart="3dp"
-            android:layout_marginEnd="3dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
             android:text="1×" />
 
         <Button
             android:id="@+id/zoomInButton"
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="44dp"
             android:layout_weight="1"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="4dp"
             android:text="+ ซูม" />
     </LinearLayout>
 
@@ -76,33 +76,60 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="5dp"
+        android:background="#111111">
+
+        <Button
+            android:id="@+id/folderButton"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:text="โฟลเดอร์" />
+
+        <Button
+            android:id="@+id/explorerButton"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="Explorer" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
         android:gravity="center"
-        android:padding="10dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="8dp"
         android:background="#111111">
 
         <Button
             android:id="@+id/switchButton"
             android:layout_width="0dp"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
             android:layout_weight="0.9"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="5dp"
             android:text="สลับกล้อง" />
 
         <Button
             android:id="@+id/captureButton"
             android:layout_width="0dp"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
             android:layout_weight="1.05"
-            android:layout_marginStart="3dp"
-            android:layout_marginEnd="3dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
             android:text="ถ่ายภาพ" />
 
         <Button
             android:id="@+id/videoButton"
             android:layout_width="0dp"
-            android:layout_height="56dp"
+            android:layout_height="54dp"
             android:layout_weight="1.05"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="5dp"
             android:text="วิดีโอ" />
     </LinearLayout>
 </LinearLayout>
