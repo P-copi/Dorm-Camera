@@ -22,6 +22,16 @@ import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ZoomState;
 import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.FallbackStrategy;
+import androidx.camera.video.FileOutputOptions;
+import androidx.camera.video.MediaStoreOutputOptions;
+import androidx.camera.video.PendingRecording;
+import androidx.camera.video.Quality;
+import androidx.camera.video.QualitySelector;
+import androidx.camera.video.Recorder;
+import androidx.camera.video.Recording;
+import androidx.camera.video.VideoCapture;
+import androidx.camera.video.VideoRecordEvent;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -38,12 +48,14 @@ import java.util.concurrent.Executor;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQ_PERMISSIONS = 1001;
+    private static final int REQ_AUDIO = 1002;
     private static final String PUBLIC_FOLDER = "DormCamera";
 
     private PreviewView previewView;
     private TextView statusText;
     private TextView zoomText;
     private Button captureButton;
+    private Button videoButton;
     private Button switchButton;
     private Button zoomOutButton;
     private Button zoomResetButton;
@@ -51,9 +63,13 @@ public class MainActivity extends AppCompatActivity {
 
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
+    private VideoCapture<Recorder> videoCapture;
+    private Recording activeRecording;
     private Camera activeCamera;
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private ScaleGestureDetector scaleGestureDetector;
+    private boolean startVideoAfterAudioPermission = false;
+    private File currentLegacyVideoFile;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
         statusText = findViewById(R.id.statusText);
         zoomText = findViewById(R.id.zoomText);
         captureButton = findViewById(R.id.captureButton);
+        videoButton = findViewById(R.id.videoButton);
         switchButton = findViewById(R.id.switchButton);
         zoomOutButton = findViewById(R.id.zoomOutButton);
         zoomResetButton = findViewById(R.id.zoomResetButton);
@@ -72,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         setCameraControlsEnabled(false);
 
         captureButton.setOnClickListener(v -> takePhoto());
+        videoButton.setOnClickListener(v -> toggleVideoRecording());
         switchButton.setOnClickListener(v -> switchCamera());
         zoomOutButton.setOnClickListener(v -> multiplyZoom(0.8f));
         zoomResetButton.setOnClickListener(v -> setZoomRatio(1.0f));
@@ -106,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setCameraControlsEnabled(boolean enabled) {
         captureButton.setEnabled(enabled);
+        videoButton.setEnabled(enabled);
         switchButton.setEnabled(enabled);
         zoomOutButton.setEnabled(enabled);
         zoomResetButton.setEnabled(enabled);
@@ -131,6 +150,11 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    private boolean hasAudioPermission() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
     private void startCamera() {
         statusText.setText("กำลังเปิดกล้อง...");
         ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
@@ -148,6 +172,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void bindCameraUseCases() {
         if (cameraProvider == null) return;
+        if (activeRecording != null) return;
 
         CameraSelector selector = new CameraSelector.Builder()
                 .requireLensFacing(lensFacing)
@@ -176,6 +201,15 @@ public class MainActivity extends AppCompatActivity {
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .build();
 
+            QualitySelector qualitySelector = QualitySelector.from(
+                    Quality.FHD,
+                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+            );
+            Recorder recorder = new Recorder.Builder()
+                    .setQualitySelector(qualitySelector)
+                    .build();
+            videoCapture = VideoCapture.withOutput(recorder);
+
             if (activeCamera != null) {
                 activeCamera.getCameraInfo().getZoomState().removeObservers(this);
             }
@@ -185,7 +219,8 @@ public class MainActivity extends AppCompatActivity {
                     this,
                     selector,
                     preview,
-                    imageCapture
+                    imageCapture,
+                    videoCapture
             );
 
             activeCamera.getCameraInfo().getZoomState().observe(this, this::updateZoomUi);
@@ -193,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
             setCameraControlsEnabled(true);
             updateCameraStatus();
         } catch (Exception e) {
-            showError("ผูกกล้องไม่สำเร็จ: " + e.getMessage());
+            showError("ผูกกล้อง/วิดีโอไม่สำเร็จ: " + e.getMessage());
         }
     }
 
@@ -215,9 +250,15 @@ public class MainActivity extends AppCompatActivity {
                 max
         ));
 
-        zoomOutButton.setEnabled(zoom > min + 0.01f);
-        zoomInButton.setEnabled(zoom < max - 0.01f);
-        zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
+        if (activeRecording == null) {
+            zoomOutButton.setEnabled(zoom > min + 0.01f);
+            zoomInButton.setEnabled(zoom < max - 0.01f);
+            zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
+        } else {
+            zoomOutButton.setEnabled(zoom > min + 0.01f);
+            zoomInButton.setEnabled(zoom < max - 0.01f);
+            zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
+        }
     }
 
     private void multiplyZoom(float factor) {
@@ -239,6 +280,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void switchCamera() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดวิดีโอก่อนสลับกล้อง", Toast.LENGTH_SHORT).show();
+            return;
+        }
         setCameraControlsEnabled(false);
         zoomText.setText("กำลังสลับกล้อง...");
         lensFacing = lensFacing == CameraSelector.LENS_FACING_BACK
@@ -248,6 +293,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void takePhoto() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดวิดีโอก่อนถ่ายภาพ", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (imageCapture == null) {
             Toast.makeText(this, "กล้องยังไม่พร้อม", Toast.LENGTH_SHORT).show();
             return;
@@ -291,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
         if (previewView.getDisplay() != null) {
             imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
         }
-        statusText.setText("กำลังบันทึกลง Pictures/DormCamera...");
+        statusText.setText("กำลังบันทึกภาพลง Pictures/DormCamera...");
         captureButton.setEnabled(false);
 
         imageCapture.takePicture(
@@ -311,10 +360,10 @@ public class MainActivity extends AppCompatActivity {
                             );
                         }
 
-                        statusText.setText("บันทึกแล้ว • Pictures/DormCamera");
+                        statusText.setText("บันทึกภาพแล้ว • Pictures/DormCamera");
                         Toast.makeText(
                                 MainActivity.this,
-                                "บันทึกแล้วใน Pictures/DormCamera\n" + fileName,
+                                "บันทึกภาพแล้วใน Pictures/DormCamera\n" + fileName,
                                 Toast.LENGTH_LONG
                         ).show();
                         statusText.postDelayed(() -> updateCameraStatus(), 1800L);
@@ -329,9 +378,146 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    private void toggleVideoRecording() {
+        if (activeRecording != null) {
+            videoButton.setEnabled(false);
+            videoButton.setText("กำลังหยุด...");
+            activeRecording.stop();
+            return;
+        }
+
+        if (videoCapture == null) {
+            Toast.makeText(this, "วิดีโอยังไม่พร้อม", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (!hasAudioPermission()) {
+            startVideoAfterAudioPermission = true;
+            ActivityCompat.requestPermissions(
+                    this,
+                    new String[]{Manifest.permission.RECORD_AUDIO},
+                    REQ_AUDIO
+            );
+            return;
+        }
+
+        startVideoRecording();
+    }
+
+    private void startVideoRecording() {
+        if (videoCapture == null || activeRecording != null) return;
+
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
+                .format(new Date());
+        String fileName = "VID_" + stamp + ".mp4";
+
+        PendingRecording pendingRecording;
+        currentLegacyVideoFile = null;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, fileName);
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            values.put(
+                    MediaStore.Video.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_MOVIES + File.separator + PUBLIC_FOLDER
+            );
+
+            MediaStoreOutputOptions outputOptions = new MediaStoreOutputOptions.Builder(
+                    getContentResolver(),
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            ).setContentValues(values).build();
+
+            pendingRecording = videoCapture.getOutput().prepareRecording(this, outputOptions);
+        } else {
+            File moviesDir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_MOVIES
+            );
+            File dormDir = new File(moviesDir, PUBLIC_FOLDER);
+            if (!dormDir.exists() && !dormDir.mkdirs()) {
+                showError("สร้างโฟลเดอร์ Movies/DormCamera ไม่สำเร็จ");
+                return;
+            }
+            currentLegacyVideoFile = new File(dormDir, fileName);
+            FileOutputOptions outputOptions = new FileOutputOptions.Builder(currentLegacyVideoFile).build();
+            pendingRecording = videoCapture.getOutput().prepareRecording(this, outputOptions);
+        }
+
+        if (hasAudioPermission()) {
+            pendingRecording = pendingRecording.withAudioEnabled();
+        } else {
+            Toast.makeText(this, "บันทึกวิดีโอแบบไม่มีเสียง", Toast.LENGTH_SHORT).show();
+        }
+
+        captureButton.setEnabled(false);
+        switchButton.setEnabled(false);
+        videoButton.setEnabled(true);
+        videoButton.setText("หยุดวิดีโอ");
+
+        activeRecording = pendingRecording.start(
+                ContextCompat.getMainExecutor(this),
+                event -> handleVideoEvent(event, fileName)
+        );
+    }
+
+    private void handleVideoEvent(VideoRecordEvent event, String fileName) {
+        if (event instanceof VideoRecordEvent.Start) {
+            String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
+            statusText.setText("กำลังบันทึกวิดีโอ • " + side + " • 1080p/720p • Movies/DormCamera");
+            return;
+        }
+
+        if (event instanceof VideoRecordEvent.Finalize) {
+            VideoRecordEvent.Finalize finalizeEvent = (VideoRecordEvent.Finalize) event;
+            File legacyVideoFile = currentLegacyVideoFile;
+            currentLegacyVideoFile = null;
+
+            if (activeRecording != null) {
+                activeRecording.close();
+                activeRecording = null;
+            }
+
+            videoButton.setEnabled(true);
+            videoButton.setText("วิดีโอ");
+            captureButton.setEnabled(true);
+            switchButton.setEnabled(true);
+
+            ZoomState state = activeCamera != null
+                    ? activeCamera.getCameraInfo().getZoomState().getValue()
+                    : null;
+            updateZoomUi(state);
+
+            if (finalizeEvent.hasError()) {
+                showError("บันทึกวิดีโอไม่สำเร็จ (error " + finalizeEvent.getError() + ")");
+                return;
+            }
+
+            if (legacyVideoFile != null) {
+                MediaScannerConnection.scanFile(
+                        this,
+                        new String[]{legacyVideoFile.getAbsolutePath()},
+                        new String[]{"video/mp4"},
+                        null
+                );
+            }
+
+            statusText.setText("บันทึกวิดีโอแล้ว • Movies/DormCamera");
+            Toast.makeText(
+                    this,
+                    "บันทึกวิดีโอแล้วใน Movies/DormCamera\n" + fileName,
+                    Toast.LENGTH_LONG
+            ).show();
+            statusText.postDelayed(this::updateCameraStatus, 1800L);
+        }
+    }
+
     private void updateCameraStatus() {
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
-        statusText.setText("Dorm Camera • " + side + " • บันทึก: Pictures/DormCamera");
+        statusText.setText(
+                "Dorm Camera • " + side
+                        + " • ภาพ: Pictures/DormCamera"
+                        + " • วิดีโอ: Movies/DormCamera"
+        );
     }
 
     private void showError(String message) {
@@ -346,12 +532,34 @@ public class MainActivity extends AppCompatActivity {
             @NonNull int[] grantResults
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
         if (requestCode == REQ_PERMISSIONS) {
             if (hasRequiredPermissions()) {
                 startCamera();
             } else {
-                showError("ต้องอนุญาตสิทธิ์กล้องและสิทธิ์บันทึกภาพก่อนใช้งาน");
+                showError("ต้องอนุญาตสิทธิ์กล้องและสิทธิ์บันทึกก่อนใช้งาน");
             }
+            return;
         }
+
+        if (requestCode == REQ_AUDIO && startVideoAfterAudioPermission) {
+            startVideoAfterAudioPermission = false;
+            if (!hasAudioPermission()) {
+                Toast.makeText(
+                        this,
+                        "ไม่ได้อนุญาตไมโครโฟน — จะบันทึกวิดีโอแบบไม่มีเสียง",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+            startVideoRecording();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (activeRecording != null) {
+            activeRecording.stop();
+        }
+        super.onDestroy();
     }
 }

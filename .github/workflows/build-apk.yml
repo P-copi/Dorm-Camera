@@ -47,59 +47,45 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/badging.txt
-          grep -q "versionCode='5'" /tmp/badging.txt
-          grep -q "versionName='0.1.4'" /tmp/badging.txt
+          grep -q "versionCode='6'" /tmp/badging.txt
+          grep -q "versionName='0.1.5'" /tmp/badging.txt
           grep -q "launchable-activity: name='com.pcopi.dormcamera.MainActivity'" /tmp/badging.txt
 
       - name: Prepare permanent signing key
-        id: signing
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.DORM_CAMERA_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.DORM_CAMERA_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
-            mkdir -p "$GITHUB_WORKSPACE/.signing"
-            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$GITHUB_WORKSPACE/.signing/dorm-camera-release.jks"
-            test -s "$GITHUB_WORKSPACE/.signing/dorm-camera-release.jks"
-            echo "DORM_CAMERA_KEYSTORE_PATH=$GITHUB_WORKSPACE/.signing/dorm-camera-release.jks" >> "$GITHUB_ENV"
-            echo "DORM_CAMERA_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          fi
+          test -n "$KEYSTORE_B64"
+          test -n "$KEYSTORE_PASSWORD"
+          mkdir -p "$GITHUB_WORKSPACE/.signing"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$GITHUB_WORKSPACE/.signing/dorm-camera-release.jks"
+          test -s "$GITHUB_WORKSPACE/.signing/dorm-camera-release.jks"
+          echo "DORM_CAMERA_KEYSTORE_PATH=$GITHUB_WORKSPACE/.signing/dorm-camera-release.jks" >> "$GITHUB_ENV"
+          echo "DORM_CAMERA_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Build permanently signed release APK
-        if: steps.signing.outputs.configured == 'true'
         run: gradle :app:assembleRelease --stacktrace --no-daemon
 
       - name: Verify permanent release signature
-        if: steps.signing.outputs.configured == 'true'
         shell: bash
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/signature.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/release-badging.txt
-          grep -q "versionCode='5'" /tmp/release-badging.txt
-          grep -q "versionName='0.1.4'" /tmp/release-badging.txt
+          grep -q "package: name='com.pcopi.dormcamera'" /tmp/release-badging.txt
+          grep -q "versionCode='6'" /tmp/release-badging.txt
+          grep -q "versionName='0.1.5'" /tmp/release-badging.txt
+          grep -q "launchable-activity: name='com.pcopi.dormcamera.MainActivity'" /tmp/release-badging.txt
 
       - name: Upload signed release APK
-        if: steps.signing.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Dorm-Camera-V0.1.4-Permanent-Signed
+          name: Dorm-Camera-V0.1.5-Video-Permanent-Signed
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 7
-
-      - name: Upload debug APK when permanent signing is not configured
-        if: steps.signing.outputs.configured != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Dorm-Camera-V0.1.4-Needs-Signing-Secrets-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 3
