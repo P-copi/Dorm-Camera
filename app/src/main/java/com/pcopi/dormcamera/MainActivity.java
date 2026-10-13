@@ -8,16 +8,19 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.view.ScaleGestureDetector;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
+import androidx.camera.core.ZoomState;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
@@ -39,12 +42,18 @@ public class MainActivity extends AppCompatActivity {
 
     private PreviewView previewView;
     private TextView statusText;
+    private TextView zoomText;
     private Button captureButton;
     private Button switchButton;
+    private Button zoomOutButton;
+    private Button zoomResetButton;
+    private Button zoomInButton;
 
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
+    private Camera activeCamera;
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
+    private ScaleGestureDetector scaleGestureDetector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,20 +62,54 @@ public class MainActivity extends AppCompatActivity {
 
         previewView = findViewById(R.id.previewView);
         statusText = findViewById(R.id.statusText);
+        zoomText = findViewById(R.id.zoomText);
         captureButton = findViewById(R.id.captureButton);
         switchButton = findViewById(R.id.switchButton);
+        zoomOutButton = findViewById(R.id.zoomOutButton);
+        zoomResetButton = findViewById(R.id.zoomResetButton);
+        zoomInButton = findViewById(R.id.zoomInButton);
 
-        captureButton.setEnabled(false);
-        switchButton.setEnabled(false);
+        setCameraControlsEnabled(false);
 
         captureButton.setOnClickListener(v -> takePhoto());
         switchButton.setOnClickListener(v -> switchCamera());
+        zoomOutButton.setOnClickListener(v -> multiplyZoom(0.8f));
+        zoomResetButton.setOnClickListener(v -> setZoomRatio(1.0f));
+        zoomInButton.setOnClickListener(v -> multiplyZoom(1.25f));
+
+        scaleGestureDetector = new ScaleGestureDetector(
+                this,
+                new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    @Override
+                    public boolean onScale(@NonNull ScaleGestureDetector detector) {
+                        if (activeCamera == null) return false;
+                        ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
+                        if (state == null) return false;
+                        float target = state.getZoomRatio() * detector.getScaleFactor();
+                        setZoomRatio(target);
+                        return true;
+                    }
+                }
+        );
+
+        previewView.setOnTouchListener((view, event) -> {
+            scaleGestureDetector.onTouchEvent(event);
+            return true;
+        });
 
         if (hasRequiredPermissions()) {
             startCamera();
         } else {
             ActivityCompat.requestPermissions(this, requiredPermissions(), REQ_PERMISSIONS);
         }
+    }
+
+    private void setCameraControlsEnabled(boolean enabled) {
+        captureButton.setEnabled(enabled);
+        switchButton.setEnabled(enabled);
+        zoomOutButton.setEnabled(enabled);
+        zoomResetButton.setEnabled(enabled);
+        zoomInButton.setEnabled(enabled);
     }
 
     private String[] requiredPermissions() {
@@ -133,20 +176,71 @@ public class MainActivity extends AppCompatActivity {
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .build();
 
-            cameraProvider.unbindAll();
-            cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
+            if (activeCamera != null) {
+                activeCamera.getCameraInfo().getZoomState().removeObservers(this);
+            }
 
-            captureButton.setEnabled(true);
-            switchButton.setEnabled(true);
+            cameraProvider.unbindAll();
+            activeCamera = cameraProvider.bindToLifecycle(
+                    this,
+                    selector,
+                    preview,
+                    imageCapture
+            );
+
+            activeCamera.getCameraInfo().getZoomState().observe(this, this::updateZoomUi);
+            setZoomRatio(1.0f);
+            setCameraControlsEnabled(true);
             updateCameraStatus();
         } catch (Exception e) {
             showError("ผูกกล้องไม่สำเร็จ: " + e.getMessage());
         }
     }
 
+    private void updateZoomUi(ZoomState state) {
+        if (state == null) {
+            zoomText.setText("ซูม --");
+            return;
+        }
+
+        float zoom = state.getZoomRatio();
+        float min = state.getMinZoomRatio();
+        float max = state.getMaxZoomRatio();
+
+        zoomText.setText(String.format(
+                Locale.US,
+                "ซูม %.1fx  •  ช่วง %.1f–%.1fx  •  บีบนิ้วบนภาพเพื่อซูม",
+                zoom,
+                min,
+                max
+        ));
+
+        zoomOutButton.setEnabled(zoom > min + 0.01f);
+        zoomInButton.setEnabled(zoom < max - 0.01f);
+        zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
+    }
+
+    private void multiplyZoom(float factor) {
+        if (activeCamera == null) return;
+        ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
+        if (state == null) return;
+        setZoomRatio(state.getZoomRatio() * factor);
+    }
+
+    private void setZoomRatio(float requestedRatio) {
+        if (activeCamera == null) return;
+        ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
+        if (state == null) return;
+
+        float min = state.getMinZoomRatio();
+        float max = state.getMaxZoomRatio();
+        float safeRatio = Math.max(min, Math.min(max, requestedRatio));
+        activeCamera.getCameraControl().setZoomRatio(safeRatio);
+    }
+
     private void switchCamera() {
-        captureButton.setEnabled(false);
-        switchButton.setEnabled(false);
+        setCameraControlsEnabled(false);
+        zoomText.setText("กำลังสลับกล้อง...");
         lensFacing = lensFacing == CameraSelector.LENS_FACING_BACK
                 ? CameraSelector.LENS_FACING_FRONT
                 : CameraSelector.LENS_FACING_BACK;
