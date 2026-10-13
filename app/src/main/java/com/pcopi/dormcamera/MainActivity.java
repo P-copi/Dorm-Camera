@@ -1,9 +1,13 @@
 package com.pcopi.dormcamera;
 
 import android.Manifest;
+import android.content.ContentValues;
 import android.content.pm.PackageManager;
+import android.media.MediaScannerConnection;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -23,12 +27,15 @@ import com.google.common.util.concurrent.ListenableFuture;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 
 public class MainActivity extends AppCompatActivity {
-    private static final int REQ_CAMERA = 1001;
+    private static final int REQ_PERMISSIONS = 1001;
+    private static final String PUBLIC_FOLDER = "DormCamera";
 
     private PreviewView previewView;
     private TextView statusText;
@@ -55,16 +62,30 @@ public class MainActivity extends AppCompatActivity {
         captureButton.setOnClickListener(v -> takePhoto());
         switchButton.setOnClickListener(v -> switchCamera());
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
+        if (hasRequiredPermissions()) {
             startCamera();
         } else {
-            ActivityCompat.requestPermissions(
-                    this,
-                    new String[]{Manifest.permission.CAMERA},
-                    REQ_CAMERA
-            );
+            ActivityCompat.requestPermissions(this, requiredPermissions(), REQ_PERMISSIONS);
         }
+    }
+
+    private String[] requiredPermissions() {
+        List<String> permissions = new ArrayList<>();
+        permissions.add(Manifest.permission.CAMERA);
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
+        return permissions.toArray(new String[0]);
+    }
+
+    private boolean hasRequiredPermissions() {
+        for (String permission : requiredPermissions()) {
+            if (ContextCompat.checkSelfPermission(this, permission)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void startCamera() {
@@ -138,23 +159,45 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        File baseDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-        if (baseDir == null) {
-            baseDir = getFilesDir();
-        }
-        File dormDir = new File(baseDir, "DormCamera");
-        if (!dormDir.exists() && !dormDir.mkdirs()) {
-            showError("สร้างโฟลเดอร์ภาพไม่สำเร็จ");
-            return;
-        }
-
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
                 .format(new Date());
-        File photoFile = new File(dormDir, "IMG_" + stamp + ".jpg");
+        String fileName = "IMG_" + stamp + ".jpg";
 
-        imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
-        ImageCapture.OutputFileOptions options = new ImageCapture.OutputFileOptions.Builder(photoFile).build();
-        statusText.setText("กำลังบันทึกภาพ...");
+        final File legacyPhotoFile;
+        ImageCapture.OutputFileOptions options;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            legacyPhotoFile = null;
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            values.put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    Environment.DIRECTORY_PICTURES + File.separator + PUBLIC_FOLDER
+            );
+
+            options = new ImageCapture.OutputFileOptions.Builder(
+                    getContentResolver(),
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    values
+            ).build();
+        } else {
+            File picturesDir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_PICTURES
+            );
+            File dormDir = new File(picturesDir, PUBLIC_FOLDER);
+            if (!dormDir.exists() && !dormDir.mkdirs()) {
+                showError("สร้างโฟลเดอร์ Pictures/DormCamera ไม่สำเร็จ");
+                return;
+            }
+            legacyPhotoFile = new File(dormDir, fileName);
+            options = new ImageCapture.OutputFileOptions.Builder(legacyPhotoFile).build();
+        }
+
+        if (previewView.getDisplay() != null) {
+            imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
+        }
+        statusText.setText("กำลังบันทึกลง Pictures/DormCamera...");
         captureButton.setEnabled(false);
 
         imageCapture.takePicture(
@@ -164,12 +207,23 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
                         captureButton.setEnabled(true);
-                        updateCameraStatus();
+
+                        if (legacyPhotoFile != null) {
+                            MediaScannerConnection.scanFile(
+                                    MainActivity.this,
+                                    new String[]{legacyPhotoFile.getAbsolutePath()},
+                                    new String[]{"image/jpeg"},
+                                    null
+                            );
+                        }
+
+                        statusText.setText("บันทึกแล้ว • Pictures/DormCamera");
                         Toast.makeText(
                                 MainActivity.this,
-                                "บันทึกแล้ว: " + photoFile.getName(),
-                                Toast.LENGTH_SHORT
+                                "บันทึกแล้วใน Pictures/DormCamera\n" + fileName,
+                                Toast.LENGTH_LONG
                         ).show();
+                        statusText.postDelayed(() -> updateCameraStatus(), 1800L);
                     }
 
                     @Override
@@ -183,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateCameraStatus() {
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
-        statusText.setText("Dorm Camera • " + side + " • โหมดเร็ว");
+        statusText.setText("Dorm Camera • " + side + " • บันทึก: Pictures/DormCamera");
     }
 
     private void showError(String message) {
@@ -198,11 +252,11 @@ public class MainActivity extends AppCompatActivity {
             @NonNull int[] grantResults
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_CAMERA) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == REQ_PERMISSIONS) {
+            if (hasRequiredPermissions()) {
                 startCamera();
             } else {
-                showError("ต้องอนุญาตสิทธิ์กล้องก่อนใช้งาน");
+                showError("ต้องอนุญาตสิทธิ์กล้องและสิทธิ์บันทึกภาพก่อนใช้งาน");
             }
         }
     }
