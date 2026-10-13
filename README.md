@@ -1,39 +1,5 @@
 # Dorm Camera
 
-กล้องสำหรับผู้ดูแลหอพัก เน้นความเร็ว ความเสถียร และใช้งานง่ายบน Android 8.0 ขึ้นไป
+Dorm Camera is a lightweight Android camera app focused on fast still capture, front/back video, GPS metadata, folder-based saving, and a simple in-app media Explorer.
 
-## Current V0.1.7 — Folders + Explorer
-
-ฟังก์ชันที่ผ่านฐานแล้ว:
-- Native CameraX Preview
-- ถ่ายภาพหน้า/หลังแบบเน้นความเร็ว
-- Pinch-to-zoom
-- วิดีโอหน้า/หลัง 1080p พร้อม fallback ตามอุปกรณ์
-- GPS metadata สำหรับภาพและวิดีโอ โดย GPS ไม่ขวางการถ่าย
-- Permanent signing สำหรับอัปเดต APK ทับได้ต่อเนื่อง
-
-เพิ่มใน V0.1.7:
-- โฟลเดอร์หลักรองรับไฟล์เดิมจากรุ่นก่อน
-- สร้าง/เลือก/เปลี่ยนชื่อโฟลเดอร์บันทึก
-- ล็อกโฟลเดอร์ปัจจุบันเพื่อป้องกันการเปลี่ยนปลายทางโดยไม่ตั้งใจ
-- Explorer เข้าโฟลเดอร์ที่กำลังใช้งานโดยตรง
-- แสดงภาพและวิดีโอรวมกัน
-- Preview ภายในแอป
-- เลือกหลายไฟล์ / เลือกทั้งหมด / ล้างการเลือก
-- แชร์ เปลี่ยนชื่อ ลบ และรีเฟรชรายการ
-
-## Roadmap V1
-
-1. กล้องนิ่งหน้า/หลัง + บันทึกเร็ว — ผ่าน
-2. วิดีโอหน้า/หลัง — ผ่าน
-3. GPS metadata — ผ่าน
-4. เลือก/สร้าง/เปลี่ยนชื่อ/ล็อกโฟลเดอร์ — V0.1.7
-5. Explorer ภายในแอป — V0.1.7
-6. เก็บ UI ให้กะทัดรัด เช่น ตัดปุ่มซูม +/- และใช้ pinch เป็นหลัก
-7. Natural Beauty แบบเบาเป็นตัวเลือกภายหลัง โดยไม่กระทบ native preview
-
-## หลักการ
-
-ความเร็ว > ความเสถียร > preview ตรงจริง > หน้า/หลัง > วิดีโอ > GPS > โฟลเดอร์/Explorer > Beauty
-
-ไม่ใส่ Image Inspector, Verify/Repair หรือ AI ตรวจคุณภาพภาพใน V1
+Current development version: 0.1.8
