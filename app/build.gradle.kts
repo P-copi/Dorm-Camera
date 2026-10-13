@@ -2,6 +2,9 @@ plugins {
     id("com.android.application")
 }
 
+val releaseKeystorePath = System.getenv("DORM_CAMERA_KEYSTORE_PATH")
+val releaseKeystorePassword = System.getenv("DORM_CAMERA_KEYSTORE_PASSWORD")
+
 android {
     namespace = "com.pcopi.dormcamera"
     compileSdk = 35
@@ -10,13 +13,27 @@ android {
         applicationId = "com.pcopi.dormcamera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
+    }
+
+    signingConfigs {
+        if (!releaseKeystorePath.isNullOrBlank() && !releaseKeystorePassword.isNullOrBlank()) {
+            create("permanentRelease") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = releaseKeystorePassword
+                keyAlias = "dorm-camera"
+                keyPassword = releaseKeystorePassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfigs.findByName("permanentRelease")?.let {
+                signingConfig = it
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
