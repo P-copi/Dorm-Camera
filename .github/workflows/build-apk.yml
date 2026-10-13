@@ -39,13 +39,22 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APK and launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
+          grep -q "package: name='com.pcopi.dormcamera'" /tmp/badging.txt
+          grep -q "launchable-activity: name='com.pcopi.dormcamera.MainActivity'" /tmp/badging.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dorm-Camera-V0.1.0-debug
+          name: Dorm-Camera-V0.1.1-Launch-Fix-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
