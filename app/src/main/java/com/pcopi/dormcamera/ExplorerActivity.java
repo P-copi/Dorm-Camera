@@ -716,12 +716,14 @@ public class ExplorerActivity extends AppCompatActivity {
             ImageView image;
             CheckBox check;
             TextView badge;
+            TextView playBadge;
 
             if (convertView instanceof FrameLayout) {
                 root = (FrameLayout) convertView;
                 image = (ImageView) root.findViewWithTag("image");
                 check = (CheckBox) root.findViewWithTag("check");
                 badge = (TextView) root.findViewWithTag("badge");
+                playBadge = (TextView) root.findViewWithTag("playBadge");
             } else {
                 root = new FrameLayout(ExplorerActivity.this);
                 root.setLayoutParams(new GridView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
@@ -733,6 +735,23 @@ public class ExplorerActivity extends AppCompatActivity {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                 ));
+
+                playBadge = new TextView(ExplorerActivity.this);
+                playBadge.setTag("playBadge");
+                playBadge.setText("▶");
+                playBadge.setTextColor(0xFFFFFFFF);
+                playBadge.setTextSize(19f);
+                playBadge.setGravity(Gravity.CENTER);
+                playBadge.setFocusable(false);
+                playBadge.setContentDescription("วิดีโอ");
+                playBadge.setBackgroundResource(R.drawable.bg_video_play_badge);
+                playBadge.setElevation(dp(4));
+                FrameLayout.LayoutParams playParams = new FrameLayout.LayoutParams(
+                        dp(44),
+                        dp(44),
+                        Gravity.CENTER
+                );
+                root.addView(playBadge, playParams);
 
                 check = new CheckBox(ExplorerActivity.this);
                 check.setTag("check");
@@ -773,7 +792,8 @@ public class ExplorerActivity extends AppCompatActivity {
                 updateSelectionStatus();
             });
 
-            badge.setText(item.video ? "▶ " + item.name : item.name);
+            badge.setText(item.name);
+            playBadge.setVisibility(item.video ? View.VISIBLE : View.GONE);
             image.setImageDrawable(null);
             image.setTag(R.id.thumbnail_uri_tag, item.uri.toString());
             loadThumbnail(item, image);
