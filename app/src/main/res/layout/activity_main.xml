@@ -28,7 +28,7 @@
         android:backgroundTint="@null"
         android:stateListAnimator="@null" />
 
-    <TextView
+    <com.pcopi.dormcamera.CameraStatusTextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="26dp"
@@ -73,16 +73,17 @@
         <com.pcopi.dormcamera.PulseChronometer
             android:id="@+id/recordingTimer"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="30dp"
             android:layout_gravity="top|center_horizontal"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:gravity="center"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:paddingStart="11dp"
+            android:paddingEnd="11dp"
             android:format="●  REC  %s"
-            android:textColor="#FF646F"
-            android:textSize="14sp"
+            android:textColor="#FF6D78"
+            android:textSize="12sp"
             android:textStyle="bold"
+            android:elevation="5dp"
             android:visibility="gone"
             android:background="@drawable/bg_recording_badge" />
 

@@ -6,12 +6,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.MediaController;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,7 +29,6 @@ public class PreviewActivity extends AppCompatActivity {
     private TextView title;
     private ZoomImageView imageView;
     private VideoView videoView;
-    private FrameLayout mediaFrame;
     private Button playPauseButton;
     private TextView previewStatus;
     private boolean videoPrepared;
@@ -55,7 +51,6 @@ public class PreviewActivity extends AppCompatActivity {
         title = findViewById(R.id.previewTitle);
         imageView = findViewById(R.id.previewImage);
         videoView = findViewById(R.id.previewVideo);
-        mediaFrame = findViewById(R.id.previewMediaFrame);
         previewStatus = findViewById(R.id.previewStatus);
         playPauseButton = findViewById(R.id.previewPlayPauseButton);
         Button closeButton = findViewById(R.id.previewCloseButton);
@@ -206,7 +201,6 @@ public class PreviewActivity extends AppCompatActivity {
         if (video) {
             imageView.setVisibility(View.GONE);
             imageView.setImageDrawable(null);
-            resetVideoBounds();
             videoView.setVisibility(View.VISIBLE);
             playPauseButton.setVisibility(View.VISIBLE);
             previewStatus.setText("ปัดซ้าย/ขวาเพื่อเปลี่ยนไฟล์ • กำลังเตรียมวิดีโอ...");
@@ -218,7 +212,6 @@ public class PreviewActivity extends AppCompatActivity {
 
             videoView.setOnPreparedListener(mp -> {
                 videoPrepared = true;
-                fitVideoToFrame(mp.getVideoWidth(), mp.getVideoHeight());
                 previewStatus.setText("ปัดซ้าย/ขวาเพื่อเปลี่ยนไฟล์ • วิดีโอพร้อมเล่น");
                 playPauseButton.setText("หยุดชั่วคราว");
                 videoView.start();
@@ -244,7 +237,6 @@ public class PreviewActivity extends AppCompatActivity {
             playPauseButton.setOnClickListener(v -> {
                 if (!videoPrepared) {
                     previewStatus.setText("กำลังลองเปิดวิดีโออีกครั้ง...");
-                    resetVideoBounds();
                     videoView.setVideoURI(item.uri);
                     videoView.start();
                     return;
@@ -274,37 +266,6 @@ public class PreviewActivity extends AppCompatActivity {
                 }
             });
         }
-    }
-
-    private void resetVideoBounds() {
-        if (videoView == null) return;
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        );
-        params.gravity = Gravity.CENTER;
-        videoView.setLayoutParams(params);
-    }
-
-    private void fitVideoToFrame(int videoWidth, int videoHeight) {
-        if (videoView == null || mediaFrame == null || videoWidth <= 0 || videoHeight <= 0) return;
-        mediaFrame.post(() -> {
-            int frameWidth = mediaFrame.getWidth();
-            int frameHeight = mediaFrame.getHeight();
-            if (frameWidth <= 0 || frameHeight <= 0) return;
-
-            float scale = Math.min(
-                    frameWidth / (float) videoWidth,
-                    frameHeight / (float) videoHeight
-            );
-            int targetWidth = Math.max(1, Math.round(videoWidth * scale));
-            int targetHeight = Math.max(1, Math.round(videoHeight * scale));
-
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(targetWidth, targetHeight);
-            params.gravity = Gravity.CENTER;
-            videoView.setLayoutParams(params);
-            videoView.requestLayout();
-        });
     }
 
     private void updateTitle() {
