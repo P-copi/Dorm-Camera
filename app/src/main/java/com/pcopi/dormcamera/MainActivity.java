@@ -3,8 +3,10 @@ package com.pcopi.dormcamera;
 import android.Manifest;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.media.MediaActionSound;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
@@ -37,6 +39,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.video.FallbackStrategy;
 import androidx.camera.video.FileOutputOptions;
 import androidx.camera.video.MediaStoreOutputOptions;
+import androidx.camera.video.MirrorMode;
 import androidx.camera.video.PendingRecording;
 import androidx.camera.video.Quality;
 import androidx.camera.video.QualitySelector;
@@ -63,6 +66,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_PERMISSIONS = 1001;
     private static final int REQ_AUDIO = 1002;
     private static final int REQ_LOCATION = 1003;
+    private static final String PREFS_CAMERA = "camera_settings";
+    private static final String PREF_SHUTTER_SOUND = "shutter_sound_enabled";
 
     private PreviewView previewView;
     private TextView statusText;
@@ -77,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
     private Button flashButton;
     private Button folderButton;
     private Button explorerButton;
+    private Button shutterSoundButton;
     private View focusIndicator;
     private Chronometer recordingTimer;
     private TextView saveBanner;
@@ -102,6 +108,9 @@ public class MainActivity extends AppCompatActivity {
     private Location currentCaptureLocation;
     private FolderStore folderStore;
     private int selectedFlashMode = ImageCapture.FLASH_MODE_AUTO;
+    private SharedPreferences cameraPreferences;
+    private MediaActionSound shutterSound;
+    private boolean shutterSoundEnabled = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -121,6 +130,7 @@ public class MainActivity extends AppCompatActivity {
         flashButton = findViewById(R.id.flashButton);
         folderButton = findViewById(R.id.folderButton);
         explorerButton = findViewById(R.id.explorerButton);
+        shutterSoundButton = findViewById(R.id.shutterSoundButton);
         focusIndicator = findViewById(R.id.focusIndicator);
         recordingTimer = findViewById(R.id.recordingTimer);
         saveBanner = findViewById(R.id.saveBanner);
@@ -128,6 +138,11 @@ public class MainActivity extends AppCompatActivity {
 
         locationHelper = new LocationHelper(this);
         folderStore = new FolderStore(this);
+        cameraPreferences = getSharedPreferences(PREFS_CAMERA, MODE_PRIVATE);
+        shutterSoundEnabled = cameraPreferences.getBoolean(PREF_SHUTTER_SOUND, true);
+        shutterSound = new MediaActionSound();
+        shutterSound.load(MediaActionSound.SHUTTER_CLICK);
+        updateShutterSoundUi();
 
         setCameraControlsEnabled(false);
 
@@ -140,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
         flashButton.setOnClickListener(v -> cycleFlashMode());
         folderButton.setOnClickListener(v -> showFolderMenu());
         explorerButton.setOnClickListener(v -> openExplorer());
+        shutterSoundButton.setOnClickListener(v -> toggleShutterSound());
         folderBanner.setOnClickListener(v -> showQuickFolderDialog());
         folderBanner.setOnLongClickListener(v -> {
             showFolderMenu();
@@ -220,6 +236,7 @@ public class MainActivity extends AppCompatActivity {
         flashButton.setEnabled(enabled);
         folderButton.setEnabled(enabled);
         explorerButton.setEnabled(enabled);
+        shutterSoundButton.setEnabled(enabled);
         folderBanner.setEnabled(enabled);
     }
 
@@ -350,7 +367,9 @@ public class MainActivity extends AppCompatActivity {
                     FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
             );
             Recorder recorder = new Recorder.Builder().setQualitySelector(qualitySelector).build();
-            videoCapture = VideoCapture.withOutput(recorder);
+            videoCapture = new VideoCapture.Builder<>(recorder)
+                    .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
+                    .build();
 
             if (activeCamera != null) {
                 activeCamera.getCameraInfo().getZoomState().removeObservers(this);
@@ -364,6 +383,7 @@ public class MainActivity extends AppCompatActivity {
             applyFlashMode();
             updateExposureUi();
             updateFlashUi();
+            updateShutterSoundUi();
             setCameraControlsEnabled(true);
             updateCameraStatus();
         } catch (Exception e) {
@@ -503,6 +523,34 @@ public class MainActivity extends AppCompatActivity {
         flashButton.setEnabled(activeRecording == null);
     }
 
+    private void toggleShutterSound() {
+        shutterSoundEnabled = !shutterSoundEnabled;
+        cameraPreferences.edit().putBoolean(PREF_SHUTTER_SOUND, shutterSoundEnabled).apply();
+        updateShutterSoundUi();
+        Toast.makeText(
+                this,
+                shutterSoundEnabled ? "เสียงชัตเตอร์: เปิด" : "เสียงชัตเตอร์: ปิด",
+                Toast.LENGTH_SHORT
+        ).show();
+    }
+
+    private void updateShutterSoundUi() {
+        if (shutterSoundButton == null) return;
+        shutterSoundButton.setText(shutterSoundEnabled ? "🔊" : "🔇");
+        shutterSoundButton.setActivated(shutterSoundEnabled);
+        shutterSoundButton.setContentDescription(
+                shutterSoundEnabled ? "ปิดเสียงชัตเตอร์" : "เปิดเสียงชัตเตอร์"
+        );
+    }
+
+    private void playShutterSoundIfEnabled() {
+        if (!shutterSoundEnabled || shutterSound == null) return;
+        try {
+            shutterSound.play(MediaActionSound.SHUTTER_CLICK);
+        } catch (Exception ignored) {
+        }
+    }
+
     private void switchCamera() {
         if (activeRecording != null) {
             Toast.makeText(this, "หยุดวิดีโอก่อนสลับกล้อง", Toast.LENGTH_SHORT).show();
@@ -535,6 +583,7 @@ public class MainActivity extends AppCompatActivity {
         currentCaptureLocation = prepareLocationForCapture();
         ImageCapture.Metadata metadata = new ImageCapture.Metadata();
         metadata.setLocation(currentCaptureLocation);
+        metadata.setReversedHorizontal(lensFacing == CameraSelector.LENS_FACING_FRONT);
 
         final File legacyPhotoFile;
         ImageCapture.OutputFileOptions options;
@@ -561,6 +610,7 @@ public class MainActivity extends AppCompatActivity {
         boolean hasGps = currentCaptureLocation != null;
         statusText.setText("กำลังบันทึกภาพ → " + roomLabel + (hasGps ? "  •  GPS ✓" : "  •  ไม่มี GPS"));
         captureButton.setEnabled(false);
+        playShutterSoundIfEnabled();
 
         imageCapture.takePicture(options, ContextCompat.getMainExecutor(this), new ImageCapture.OnImageSavedCallback() {
             @Override
@@ -654,6 +704,7 @@ public class MainActivity extends AppCompatActivity {
         switchButton.setEnabled(false);
         folderButton.setEnabled(false);
         explorerButton.setEnabled(false);
+        shutterSoundButton.setEnabled(false);
         folderBanner.setEnabled(false);
         flashButton.setEnabled(false);
         exposureDownButton.setEnabled(false);
@@ -745,9 +796,11 @@ public class MainActivity extends AppCompatActivity {
             switchButton.setEnabled(true);
             folderButton.setEnabled(true);
             explorerButton.setEnabled(true);
+            shutterSoundButton.setEnabled(true);
             folderBanner.setEnabled(true);
             updateExposureUi();
             updateFlashUi();
+            updateShutterSoundUi();
 
             if (finalizeEvent.hasError()) {
                 showError("บันทึกวิดีโอไม่สำเร็จ (error " + finalizeEvent.getError() + ")");
@@ -1091,6 +1144,13 @@ public class MainActivity extends AppCompatActivity {
             saveBanner.removeCallbacks(hideSaveBannerRunnable);
         }
         if (activeRecording != null) activeRecording.stop();
+        if (shutterSound != null) {
+            try {
+                shutterSound.release();
+            } catch (Exception ignored) {
+            }
+            shutterSound = null;
+        }
         super.onDestroy();
     }
 }
