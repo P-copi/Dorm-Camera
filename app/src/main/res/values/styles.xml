@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:statusBarColor">#000000</item>
         <item name="android:navigationBarColor">#000000</item>
-        <item name="colorAccent">#1976D2</item>
-        <item name="android:colorAccent">#1976D2</item>
+        <item name="android:windowBackground">#050506</item>
+        <item name="colorAccent">#6EA0FF</item>
+        <item name="android:colorAccent">#6EA0FF</item>
+        <item name="alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+    </style>
+
+    <style name="AppDialogTheme" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="colorAccent">#76A7FF</item>
+        <item name="android:colorAccent">#76A7FF</item>
+        <item name="android:textColorPrimary">#F5F6FA</item>
+        <item name="android:textColorSecondary">#B8BCC7</item>
+        <item name="android:windowBackground">@drawable/bg_dialog_surface</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">88%</item>
     </style>
 </resources>
