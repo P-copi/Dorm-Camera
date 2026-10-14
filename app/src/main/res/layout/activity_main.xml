@@ -37,12 +37,11 @@
         android:layout_marginBottom="5dp"
         android:gravity="center"
         android:minWidth="210dp"
-        android:maxWidth="match_parent"
         android:paddingStart="13dp"
         android:paddingEnd="13dp"
         android:text="กล้องหลัง  •  GPS กำลังตรวจสอบ"
         android:textColor="#E6E6EA"
-        android:textSize="11.5sp"
+        android:textSize="11sp"
         android:fontFamily="sans-serif-medium"
         android:background="@drawable/bg_status_chip" />
 
@@ -84,7 +83,6 @@
             android:textColor="#FF646F"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:fontFamily="sans-serif-medium"
             android:visibility="gone"
             android:background="@drawable/bg_recording_badge" />
 
@@ -112,12 +110,12 @@
                 android:layout_height="20dp"
                 android:layout_marginTop="2dp"
                 android:gravity="center"
+                android:paddingStart="9dp"
+                android:paddingEnd="9dp"
                 android:text="ล่าสุด"
                 android:textColor="#FFFFFF"
-                android:textSize="10.5sp"
-                android:background="@drawable/bg_info_chip"
-                android:paddingStart="9dp"
-                android:paddingEnd="9dp" />
+                android:textSize="10sp"
+                android:background="@drawable/bg_info_chip" />
         </LinearLayout>
 
         <TextView
@@ -131,8 +129,7 @@
             android:paddingEnd="13dp"
             android:text="1.0×  •  แตะโฟกัส  •  บีบซูม"
             android:textColor="#FFFFFF"
-            android:textSize="11.5sp"
-            android:fontFamily="sans-serif-medium"
+            android:textSize="11sp"
             android:background="@drawable/bg_info_chip" />
     </FrameLayout>
 
@@ -152,8 +149,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:orientation="horizontal">
 
             <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/exposureDownButton"
@@ -162,10 +158,10 @@
                 android:layout_weight="1"
                 android:minHeight="0dp"
                 android:padding="0dp"
-                android:text="−  แสง"
+                android:text="− แสง"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
+                android:textSize="11sp"
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
@@ -181,7 +177,7 @@
                 android:text="EV 0.0"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
+                android:textSize="11sp"
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
@@ -194,10 +190,10 @@
                 android:layout_marginStart="5dp"
                 android:minHeight="0dp"
                 android:padding="0dp"
-                android:text="+  แสง"
+                android:text="+ แสง"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
+                android:textSize="11sp"
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
@@ -213,7 +209,7 @@
                 android:text="⚡ Auto"
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="11.5sp"
+                android:textSize="11sp"
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
@@ -278,9 +274,7 @@
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
-            <Space
-                android:layout_width="30dp"
-                android:layout_height="1dp" />
+            <Space android:layout_width="30dp" android:layout_height="1dp" />
 
             <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/captureButton"
@@ -295,9 +289,7 @@
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
-            <Space
-                android:layout_width="30dp"
-                android:layout_height="1dp" />
+            <Space android:layout_width="30dp" android:layout_height="1dp" />
 
             <com.pcopi.dormcamera.VideoControlButton
                 android:id="@+id/videoButton"
