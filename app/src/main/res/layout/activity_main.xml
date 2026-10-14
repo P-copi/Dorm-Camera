@@ -271,6 +271,23 @@
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
+
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/shutterSoundButton"
+                android:layout_width="48dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="7dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="🔊"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:contentDescription="ปิดเสียงชัตเตอร์"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
         </LinearLayout>
 
         <LinearLayout
