@@ -9,11 +9,14 @@ import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Rational;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
+import android.view.View;
 import android.widget.Button;
+import android.widget.Chronometer;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -74,6 +77,9 @@ public class MainActivity extends AppCompatActivity {
     private Button flashButton;
     private Button folderButton;
     private Button explorerButton;
+    private View focusIndicator;
+    private Chronometer recordingTimer;
+    private LatestMediaView latestMediaView;
 
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
@@ -113,6 +119,9 @@ public class MainActivity extends AppCompatActivity {
         flashButton = findViewById(R.id.flashButton);
         folderButton = findViewById(R.id.folderButton);
         explorerButton = findViewById(R.id.explorerButton);
+        focusIndicator = findViewById(R.id.focusIndicator);
+        recordingTimer = findViewById(R.id.recordingTimer);
+        latestMediaView = findViewById(R.id.latestMediaView);
 
         locationHelper = new LocationHelper(this);
         folderStore = new FolderStore(this);
@@ -184,6 +193,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         updateCameraStatus();
+        refreshLatestMedia();
 
         if (hasRequiredPermissions()) {
             startCamera();
@@ -360,14 +370,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateZoomUi(ZoomState state) {
         if (state == null) {
-            zoomText.setText("ซูม -- • แตะภาพเพื่อโฟกัส");
+            zoomText.setText("ซูม --  •  แตะโฟกัส");
             return;
         }
-        zoomText.setText(String.format(
-                Locale.US,
-                "ซูม %.1fx • แตะภาพเพื่อโฟกัส • บีบนิ้วเพื่อซูม",
-                state.getZoomRatio()
-        ));
+        zoomText.setText(String.format(Locale.US, "%.1f×  •  แตะโฟกัส  •  บีบซูม", state.getZoomRatio()));
     }
 
     private void setZoomRatio(float requestedRatio) {
@@ -380,6 +386,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void focusAt(float x, float y) {
         if (activeCamera == null) return;
+        showFocusIndicator(x, y);
         try {
             MeteringPoint point = previewView.getMeteringPointFactory().createPoint(x, y);
             FocusMeteringAction action = new FocusMeteringAction.Builder(
@@ -387,12 +394,40 @@ public class MainActivity extends AppCompatActivity {
                     FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
             ).setAutoCancelDuration(3, TimeUnit.SECONDS).build();
             activeCamera.getCameraControl().startFocusAndMetering(action);
-            zoomText.setText("กำลังโฟกัสจุดที่แตะ...");
+            zoomText.setText("กำลังโฟกัส...");
             zoomText.postDelayed(() -> {
                 if (activeCamera != null) updateZoomUi(activeCamera.getCameraInfo().getZoomState().getValue());
-            }, 900L);
+            }, 850L);
         } catch (Exception ignored) {
         }
+    }
+
+    private void showFocusIndicator(float x, float y) {
+        if (focusIndicator == null) return;
+        int size = dp(72);
+        float maxX = Math.max(0, previewView.getWidth() - size);
+        float maxY = Math.max(0, previewView.getHeight() - size);
+        float left = Math.max(0, Math.min(maxX, x - size / 2f));
+        float top = Math.max(0, Math.min(maxY, y - size / 2f));
+
+        focusIndicator.animate().cancel();
+        focusIndicator.setX(left);
+        focusIndicator.setY(top);
+        focusIndicator.setAlpha(1f);
+        focusIndicator.setScaleX(1.35f);
+        focusIndicator.setScaleY(1.35f);
+        focusIndicator.setVisibility(View.VISIBLE);
+        focusIndicator.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(150L)
+                .withEndAction(() -> focusIndicator.animate()
+                        .alpha(0f)
+                        .setStartDelay(850L)
+                        .setDuration(220L)
+                        .withEndAction(() -> focusIndicator.setVisibility(View.GONE))
+                        .start())
+                .start();
     }
 
     private void adjustExposure(int delta) {
@@ -454,13 +489,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateFlashUi() {
         if (activeCamera == null || !activeCamera.getCameraInfo().hasFlashUnit()) {
-            flashButton.setText("ไม่มีแฟลช");
+            flashButton.setText("⚡ ไม่มี");
             flashButton.setEnabled(false);
             return;
         }
         String text = selectedFlashMode == ImageCapture.FLASH_MODE_ON
-                ? "แฟลช เปิด"
-                : selectedFlashMode == ImageCapture.FLASH_MODE_OFF ? "แฟลช ปิด" : "แฟลช Auto";
+                ? "⚡ เปิด"
+                : selectedFlashMode == ImageCapture.FLASH_MODE_OFF ? "⚡ ปิด" : "⚡ Auto";
         flashButton.setText(text);
         flashButton.setEnabled(activeRecording == null);
     }
@@ -521,7 +556,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (previewView.getDisplay() != null) imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
         boolean hasGps = currentCaptureLocation != null;
-        statusText.setText("กำลังบันทึกภาพ → " + roomLabel + (hasGps ? " • GPS ✓" : " • ไม่มี GPS"));
+        statusText.setText("กำลังบันทึกภาพ → " + roomLabel + (hasGps ? "  •  GPS ✓" : "  •  ไม่มี GPS"));
         captureButton.setEnabled(false);
 
         imageCapture.takePicture(options, ContextCompat.getMainExecutor(this), new ImageCapture.OnImageSavedCallback() {
@@ -536,12 +571,13 @@ public class MainActivity extends AppCompatActivity {
                             null
                     );
                 }
-                statusText.setText("บันทึกภาพแล้ว → " + roomLabel + (hasGps ? " • GPS ✓" : ""));
+                statusText.setText("บันทึกภาพแล้ว → " + roomLabel + (hasGps ? "  •  GPS ✓" : ""));
                 Toast.makeText(
                         MainActivity.this,
                         "บันทึกภาพแล้ว → " + roomLabel + "\n" + displayPath + "\n" + fileName,
                         Toast.LENGTH_LONG
                 ).show();
+                if (latestMediaView != null) latestMediaView.postDelayed(latestMediaView::refresh, 450L);
                 statusText.postDelayed(MainActivity.this::updateCameraStatus, 1500L);
             }
 
@@ -625,13 +661,26 @@ public class MainActivity extends AppCompatActivity {
         exposureResetButton.setEnabled(false);
         exposureUpButton.setEnabled(false);
         videoButton.setEnabled(true);
-        videoButton.setText("หยุดวิดีโอ");
+        videoButton.setText("■ หยุด");
 
         final boolean hasGps = videoLocation != null;
         activeRecording = pendingRecording.start(
                 ContextCompat.getMainExecutor(this),
                 event -> handleVideoEvent(event, fileName, displayPath, roomLabel, hasGps)
         );
+    }
+
+    private void startRecordingIndicator() {
+        if (recordingTimer == null) return;
+        recordingTimer.setBase(SystemClock.elapsedRealtime());
+        recordingTimer.setVisibility(View.VISIBLE);
+        recordingTimer.start();
+    }
+
+    private void stopRecordingIndicator() {
+        if (recordingTimer == null) return;
+        recordingTimer.stop();
+        recordingTimer.setVisibility(View.GONE);
     }
 
     private void handleVideoEvent(
@@ -642,12 +691,14 @@ public class MainActivity extends AppCompatActivity {
             boolean hasGps
     ) {
         if (event instanceof VideoRecordEvent.Start) {
+            startRecordingIndicator();
             String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
-            statusText.setText("กำลังบันทึกวิดีโอ • " + side + " → " + roomLabel + (hasGps ? " • GPS ✓" : ""));
+            statusText.setText("กำลังบันทึก • " + side + " → " + roomLabel + (hasGps ? "  •  GPS ✓" : ""));
             return;
         }
 
         if (event instanceof VideoRecordEvent.Finalize) {
+            stopRecordingIndicator();
             VideoRecordEvent.Finalize finalizeEvent = (VideoRecordEvent.Finalize) event;
             File legacyVideoFile = currentLegacyVideoFile;
             currentLegacyVideoFile = null;
@@ -661,7 +712,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             videoButton.setEnabled(true);
-            videoButton.setText("วิดีโอ");
+            videoButton.setText("● วิดีโอ");
             captureButton.setEnabled(true);
             switchButton.setEnabled(true);
             folderButton.setEnabled(true);
@@ -684,14 +735,19 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
 
-            statusText.setText("บันทึกวิดีโอแล้ว → " + roomLabel + (hasGps ? " • GPS ✓" : ""));
+            statusText.setText("บันทึกวิดีโอแล้ว → " + roomLabel + (hasGps ? "  •  GPS ✓" : ""));
             Toast.makeText(
                     this,
                     "บันทึกวิดีโอแล้ว → " + roomLabel + "\n" + displayPath + "\n" + fileName,
                     Toast.LENGTH_LONG
             ).show();
+            if (latestMediaView != null) latestMediaView.postDelayed(latestMediaView::refresh, 650L);
             statusText.postDelayed(this::updateCameraStatus, 1500L);
         }
+    }
+
+    private void refreshLatestMedia() {
+        if (latestMediaView != null) latestMediaView.refresh();
     }
 
     private void showQuickFolderDialog() {
@@ -726,6 +782,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         folderStore.setCurrentFolder(target);
                         updateCameraStatus();
+                        refreshLatestMedia();
                         Toast.makeText(this, "เปลี่ยนเป็น: " + FolderStore.displayName(target), Toast.LENGTH_SHORT).show();
                     }
                 })
@@ -742,6 +799,7 @@ public class MainActivity extends AppCompatActivity {
                     folderStore.setLocked(false);
                     folderStore.setCurrentFolder(target);
                     updateCameraStatus();
+                    refreshLatestMedia();
                     Toast.makeText(this, "เปลี่ยนเป็น: " + FolderStore.displayName(target), Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("ยกเลิก", null)
@@ -794,6 +852,7 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("ใช้โฟลเดอร์นี้", (dialog, which) -> {
                     folderStore.setCurrentFolder(folders.get(selected[0]));
                     updateCameraStatus();
+                    refreshLatestMedia();
                 })
                 .setNegativeButton("ยกเลิก", null)
                 .show();
@@ -819,6 +878,7 @@ public class MainActivity extends AppCompatActivity {
                     folderStore.addFolder(name);
                     folderStore.setCurrentFolder(name);
                     updateCameraStatus();
+                    refreshLatestMedia();
                     Toast.makeText(this, "ใช้โฟลเดอร์: " + name, Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("ยกเลิก", null)
@@ -887,6 +947,7 @@ public class MainActivity extends AppCompatActivity {
                 if (finalSuccess) {
                     folderStore.renameFolder(oldName, newName);
                     updateCameraStatus();
+                    refreshLatestMedia();
                     Toast.makeText(this, "เปลี่ยนชื่อเป็น " + newName + " แล้ว", Toast.LENGTH_LONG).show();
                 } else {
                     showError("เปลี่ยนชื่อโฟลเดอร์ไม่สำเร็จ");
@@ -938,14 +999,15 @@ public class MainActivity extends AppCompatActivity {
         if (statusText == null || folderStore == null) return;
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
         String folder = FolderStore.displayName(folderStore.getCurrentFolder());
-        String lock = folderStore.isLocked() ? " 🔒" : "";
-        statusText.setText("Dorm Camera • " + side + " • " + gpsStatus);
+        String lock = folderStore.isLocked() ? "  🔒" : "";
+        statusText.setText(side + "  •  " + gpsStatus);
         if (folderBanner != null) {
-            folderBanner.setText("โฟลเดอร์บันทึก:  " + folder + lock + "   •   แตะเพื่อเปลี่ยนด่วน");
+            folderBanner.setText("📁  " + folder + lock + "   ›");
         }
     }
 
     private void showError(String message) {
+        stopRecordingIndicator();
         if (statusText != null) statusText.setText(message);
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
@@ -991,6 +1053,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         updateCameraStatus();
+        refreshLatestMedia();
         if (locationHelper != null && hasLocationPermission()) {
             Location location = locationHelper.getBestLocation();
             if (location == null || LocationHelper.isStale(location)) refreshLocation();
@@ -999,6 +1062,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        stopRecordingIndicator();
         if (activeRecording != null) activeRecording.stop();
         super.onDestroy();
     }

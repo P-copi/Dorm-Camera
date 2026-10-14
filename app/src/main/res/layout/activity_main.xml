@@ -4,155 +4,265 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#000000">
+    android:background="#070707"
+    android:paddingTop="4dp">
+
+    <TextView
+        android:id="@+id/folderBanner"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:text="📁  หลัก   ›"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:background="@drawable/bg_folder_banner"
+        android:clickable="true"
+        android:focusable="true" />
 
     <TextView
         android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:text="Dorm Camera • พร้อมใช้งาน"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
-        android:background="#000000" />
-
-    <TextView
-        android:id="@+id/folderBanner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:gravity="center"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp"
         android:paddingStart="8dp"
         android:paddingEnd="8dp"
-        android:text="โฟลเดอร์บันทึก: หลัก • แตะเพื่อเปลี่ยนด่วน"
-        android:textColor="#FFF59D"
-        android:textSize="17sp"
-        android:textStyle="bold"
-        android:background="#1B1B1B"
-        android:clickable="true"
-        android:focusable="true" />
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:text="กล้องหลัง  •  GPS กำลังตรวจสอบ"
+        android:textColor="#CFCFCF"
+        android:textSize="12sp" />
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewView"
+    <FrameLayout
+        android:id="@+id/previewContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        app:implementationMode="performance"
-        app:scaleType="fillCenter" />
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:background="#000000">
 
-    <TextView
-        android:id="@+id/zoomText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingTop="6dp"
-        android:paddingBottom="5dp"
-        android:text="ซูม 1.0x • แตะภาพเพื่อโฟกัส • บีบนิ้วเพื่อซูม"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        android:background="#111111" />
+        <androidx.camera.view.PreviewView
+            android:id="@+id/previewView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:implementationMode="performance"
+            app:scaleType="fillCenter" />
+
+        <View
+            android:id="@+id/focusIndicator"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:visibility="gone"
+            android:background="@drawable/bg_focus_ring" />
+
+        <Chronometer
+            android:id="@+id/recordingTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:format="● REC  %s"
+            android:textColor="#FF5252"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:background="@drawable/bg_recording_badge" />
+
+        <LinearLayout
+            android:id="@+id/latestMediaPanel"
+            android:layout_width="78dp"
+            android:layout_height="92dp"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="12dp"
+            android:layout_marginBottom="12dp"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <com.pcopi.dormcamera.LatestMediaView
+                android:id="@+id/latestMediaView"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:padding="2dp"
+                android:background="@drawable/bg_thumbnail_frame" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="20dp"
+                android:gravity="center"
+                android:text="ล่าสุด"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="@drawable/bg_info_chip"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/zoomText"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="14dp"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="1.0×  •  แตะโฟกัส  •  บีบซูม"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:background="@drawable/bg_info_chip" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:paddingStart="6dp"
-        android:paddingEnd="6dp"
-        android:paddingBottom="5dp"
-        android:background="#111111">
-
-        <Button
-            android:id="@+id/exposureDownButton"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1"
-            android:text="− แสง" />
-
-        <Button
-            android:id="@+id/exposureResetButton"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1"
-            android:layout_marginStart="3dp"
-            android:text="EV 0.0" />
-
-        <Button
-            android:id="@+id/exposureUpButton"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1"
-            android:layout_marginStart="3dp"
-            android:text="+ แสง" />
-
-        <Button
-            android:id="@+id/flashButton"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1.2"
-            android:layout_marginStart="3dp"
-            android:text="แฟลช Auto" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingStart="8dp"
         android:paddingEnd="8dp"
-        android:paddingBottom="5dp"
-        android:background="#111111">
-
-        <Button
-            android:id="@+id/folderButton"
-            android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_weight="1"
-            android:text="จัดการโฟลเดอร์" />
-
-        <Button
-            android:id="@+id/explorerButton"
-            android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_weight="1"
-            android:layout_marginStart="6dp"
-            android:text="Explorer" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:paddingTop="7dp"
         android:paddingBottom="8dp"
-        android:background="#111111">
+        android:background="@drawable/bg_control_panel">
 
-        <Button
-            android:id="@+id/switchButton"
-            android:layout_width="0dp"
-            android:layout_height="54dp"
-            android:layout_weight="0.9"
-            android:layout_marginEnd="5dp"
-            android:text="สลับกล้อง" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
 
-        <Button
-            android:id="@+id/captureButton"
-            android:layout_width="0dp"
-            android:layout_height="54dp"
-            android:layout_weight="1.05"
-            android:layout_marginStart="2dp"
-            android:layout_marginEnd="2dp"
-            android:text="ถ่ายภาพ" />
+            <Button
+                android:id="@+id/exposureDownButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="− แสง"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@drawable/bg_button_dark" />
 
-        <Button
-            android:id="@+id/videoButton"
-            android:layout_width="0dp"
-            android:layout_height="54dp"
-            android:layout_weight="1.05"
-            android:layout_marginStart="5dp"
-            android:text="วิดีโอ" />
+            <Button
+                android:id="@+id/exposureResetButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="EV 0.0"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@drawable/bg_button_dark" />
+
+            <Button
+                android:id="@+id/exposureUpButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="+ แสง"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@drawable/bg_button_dark" />
+
+            <Button
+                android:id="@+id/flashButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1.2"
+                android:layout_marginStart="4dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="⚡ Auto"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@drawable/bg_button_dark" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/folderButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:text="จัดการห้อง"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:background="@drawable/bg_button_dark" />
+
+            <Button
+                android:id="@+id/explorerButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:minHeight="0dp"
+                android:text="Explorer"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:background="@drawable/bg_button_dark" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/switchButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="0.9"
+                android:minHeight="0dp"
+                android:text="↻ กล้อง"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_dark" />
+
+            <Button
+                android:id="@+id/captureButton"
+                android:layout_width="0dp"
+                android:layout_height="60dp"
+                android:layout_weight="1.15"
+                android:layout_marginStart="7dp"
+                android:minHeight="0dp"
+                android:text="ถ่ายภาพ"
+                android:textColor="#111111"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_photo" />
+
+            <Button
+                android:id="@+id/videoButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1.0"
+                android:layout_marginStart="7dp"
+                android:minHeight="0dp"
+                android:text="● วิดีโอ"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_video" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>
