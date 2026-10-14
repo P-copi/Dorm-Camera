@@ -20,7 +20,7 @@
             android:layout_height="176dp"
             android:adjustViewBounds="true"
             android:scaleType="fitCenter"
-            android:src="@drawable/brand_icon"
+            android:src="@drawable/dorm_camera_logo"
             android:contentDescription="Dorm Camera" />
 
         <TextView
