@@ -13,8 +13,8 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:icon="@drawable/dorm_camera_logo"
+        android:roundIcon="@drawable/dorm_camera_logo"
         android:label="Dorm Camera"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
@@ -22,17 +22,24 @@
         <activity android:name=".PreviewActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".ExplorerActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="false" />
-
         <activity
             android:name=".SplashActivity"
             android:screenOrientation="portrait"
             android:noHistory="true"
+            android:exported="false"
+            android:theme="@style/SplashTheme" />
+
+        <activity-alias
+            android:name=".DormCameraLauncher"
+            android:targetActivity=".SplashActivity"
+            android:enabled="true"
             android:exported="true"
-            android:theme="@style/SplashTheme">
+            android:icon="@drawable/dorm_camera_logo"
+            android:label="Dorm Camera">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
     </application>
 </manifest>
