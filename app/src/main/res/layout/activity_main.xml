@@ -10,11 +10,28 @@
         android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="9dp"
+        android:padding="8dp"
         android:text="Dorm Camera • พร้อมใช้งาน"
         android:textColor="#FFFFFF"
         android:textSize="13sp"
         android:background="#000000" />
+
+    <TextView
+        android:id="@+id/folderBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:text="โฟลเดอร์บันทึก: หลัก • แตะเพื่อเปลี่ยนด่วน"
+        android:textColor="#FFF59D"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:background="#1B1B1B"
+        android:clickable="true"
+        android:focusable="true" />
 
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
@@ -30,8 +47,8 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:paddingTop="6dp"
-        android:paddingBottom="4dp"
-        android:text="ซูม 1.0x • บีบนิ้วบนภาพเพื่อซูม"
+        android:paddingBottom="5dp"
+        android:text="ซูม 1.0x • แตะภาพเพื่อโฟกัส • บีบนิ้วเพื่อซูม"
         android:textColor="#FFFFFF"
         android:textSize="12sp"
         android:background="#111111" />
@@ -41,35 +58,41 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
         android:paddingBottom="5dp"
         android:background="#111111">
 
         <Button
-            android:id="@+id/zoomOutButton"
+            android:id="@+id/exposureDownButton"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="45dp"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
-            android:text="− ซูม" />
+            android:text="− แสง" />
 
         <Button
-            android:id="@+id/zoomResetButton"
+            android:id="@+id/exposureResetButton"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="45dp"
             android:layout_weight="1"
-            android:layout_marginStart="2dp"
-            android:layout_marginEnd="2dp"
-            android:text="1×" />
+            android:layout_marginStart="3dp"
+            android:text="EV 0.0" />
 
         <Button
-            android:id="@+id/zoomInButton"
+            android:id="@+id/exposureUpButton"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="45dp"
             android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:text="+ ซูม" />
+            android:layout_marginStart="3dp"
+            android:text="+ แสง" />
+
+        <Button
+            android:id="@+id/flashButton"
+            android:layout_width="0dp"
+            android:layout_height="45dp"
+            android:layout_weight="1.2"
+            android:layout_marginStart="3dp"
+            android:text="แฟลช Auto" />
     </LinearLayout>
 
     <LinearLayout
@@ -86,7 +109,7 @@
             android:layout_width="0dp"
             android:layout_height="46dp"
             android:layout_weight="1"
-            android:text="โฟลเดอร์" />
+            android:text="จัดการโฟลเดอร์" />
 
         <Button
             android:id="@+id/explorerButton"

@@ -10,20 +10,24 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.util.Rational;
+import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.Toast;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExposureState;
+import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.Preview;
 import androidx.camera.core.ZoomState;
 import androidx.camera.lifecycle.ProcessCameraProvider;
@@ -50,6 +54,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQ_PERMISSIONS = 1001;
@@ -58,13 +63,15 @@ public class MainActivity extends AppCompatActivity {
 
     private PreviewView previewView;
     private TextView statusText;
+    private TextView folderBanner;
     private TextView zoomText;
     private Button captureButton;
     private Button videoButton;
     private Button switchButton;
-    private Button zoomOutButton;
-    private Button zoomResetButton;
-    private Button zoomInButton;
+    private Button exposureDownButton;
+    private Button exposureResetButton;
+    private Button exposureUpButton;
+    private Button flashButton;
     private Button folderButton;
     private Button explorerButton;
 
@@ -75,6 +82,10 @@ public class MainActivity extends AppCompatActivity {
     private Camera activeCamera;
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private ScaleGestureDetector scaleGestureDetector;
+    private boolean gestureWasScaling = false;
+    private float touchDownX;
+    private float touchDownY;
+    private boolean touchMoved = false;
     private boolean startVideoAfterAudioPermission = false;
     private File currentLegacyVideoFile;
 
@@ -82,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
     private String gpsStatus = "GPS: กำลังตรวจสอบ";
     private Location currentCaptureLocation;
     private FolderStore folderStore;
+    private int selectedFlashMode = ImageCapture.FLASH_MODE_AUTO;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,13 +102,15 @@ public class MainActivity extends AppCompatActivity {
 
         previewView = findViewById(R.id.previewView);
         statusText = findViewById(R.id.statusText);
+        folderBanner = findViewById(R.id.folderBanner);
         zoomText = findViewById(R.id.zoomText);
         captureButton = findViewById(R.id.captureButton);
         videoButton = findViewById(R.id.videoButton);
         switchButton = findViewById(R.id.switchButton);
-        zoomOutButton = findViewById(R.id.zoomOutButton);
-        zoomResetButton = findViewById(R.id.zoomResetButton);
-        zoomInButton = findViewById(R.id.zoomInButton);
+        exposureDownButton = findViewById(R.id.exposureDownButton);
+        exposureResetButton = findViewById(R.id.exposureResetButton);
+        exposureUpButton = findViewById(R.id.exposureUpButton);
+        flashButton = findViewById(R.id.flashButton);
         folderButton = findViewById(R.id.folderButton);
         explorerButton = findViewById(R.id.explorerButton);
 
@@ -108,22 +122,33 @@ public class MainActivity extends AppCompatActivity {
         captureButton.setOnClickListener(v -> takePhoto());
         videoButton.setOnClickListener(v -> toggleVideoRecording());
         switchButton.setOnClickListener(v -> switchCamera());
-        zoomOutButton.setOnClickListener(v -> multiplyZoom(0.8f));
-        zoomResetButton.setOnClickListener(v -> setZoomRatio(1.0f));
-        zoomInButton.setOnClickListener(v -> multiplyZoom(1.25f));
+        exposureDownButton.setOnClickListener(v -> adjustExposure(-1));
+        exposureResetButton.setOnClickListener(v -> resetExposure());
+        exposureUpButton.setOnClickListener(v -> adjustExposure(1));
+        flashButton.setOnClickListener(v -> cycleFlashMode());
         folderButton.setOnClickListener(v -> showFolderMenu());
         explorerButton.setOnClickListener(v -> openExplorer());
+        folderBanner.setOnClickListener(v -> showQuickFolderDialog());
+        folderBanner.setOnLongClickListener(v -> {
+            showFolderMenu();
+            return true;
+        });
 
         scaleGestureDetector = new ScaleGestureDetector(
                 this,
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
+                    public boolean onScaleBegin(@NonNull ScaleGestureDetector detector) {
+                        gestureWasScaling = true;
+                        return true;
+                    }
+
+                    @Override
                     public boolean onScale(@NonNull ScaleGestureDetector detector) {
                         if (activeCamera == null) return false;
                         ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
                         if (state == null) return false;
-                        float target = state.getZoomRatio() * detector.getScaleFactor();
-                        setZoomRatio(target);
+                        setZoomRatio(state.getZoomRatio() * detector.getScaleFactor());
                         return true;
                     }
                 }
@@ -131,8 +156,34 @@ public class MainActivity extends AppCompatActivity {
 
         previewView.setOnTouchListener((view, event) -> {
             scaleGestureDetector.onTouchEvent(event);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchDownX = event.getX();
+                    touchDownY = event.getY();
+                    touchMoved = false;
+                    gestureWasScaling = false;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (Math.hypot(event.getX() - touchDownX, event.getY() - touchDownY) > dp(18)) {
+                        touchMoved = true;
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (!gestureWasScaling && !touchMoved) {
+                        focusAt(event.getX(), event.getY());
+                    }
+                    gestureWasScaling = false;
+                    break;
+                case MotionEvent.ACTION_CANCEL:
+                    gestureWasScaling = false;
+                    break;
+                default:
+                    break;
+            }
             return true;
         });
+
+        updateCameraStatus();
 
         if (hasRequiredPermissions()) {
             startCamera();
@@ -142,15 +193,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     private void setCameraControlsEnabled(boolean enabled) {
         captureButton.setEnabled(enabled);
         videoButton.setEnabled(enabled);
         switchButton.setEnabled(enabled);
-        zoomOutButton.setEnabled(enabled);
-        zoomResetButton.setEnabled(enabled);
-        zoomInButton.setEnabled(enabled);
+        exposureDownButton.setEnabled(enabled);
+        exposureResetButton.setEnabled(enabled);
+        exposureUpButton.setEnabled(enabled);
+        flashButton.setEnabled(enabled);
         folderButton.setEnabled(enabled);
         explorerButton.setEnabled(enabled);
+        folderBanner.setEnabled(enabled);
     }
 
     private String[] requiredPermissions() {
@@ -165,8 +222,7 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean hasRequiredPermissions() {
         for (String permission : requiredPermissions()) {
-            if (ContextCompat.checkSelfPermission(this, permission)
-                    != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
                 return false;
             }
         }
@@ -190,15 +246,11 @@ public class MainActivity extends AppCompatActivity {
             refreshLocation();
             return;
         }
-
         gpsStatus = "GPS: รออนุญาต";
         updateCameraStatus();
         ActivityCompat.requestPermissions(
                 this,
-                new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                },
+                new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
                 REQ_LOCATION
         );
     }
@@ -212,7 +264,6 @@ public class MainActivity extends AppCompatActivity {
 
         gpsStatus = "GPS: กำลังหาพิกัด";
         updateCameraStatus();
-
         locationHelper.refresh(new LocationHelper.Callback() {
             @Override
             public void onLocation(@NonNull Location location) {
@@ -235,7 +286,6 @@ public class MainActivity extends AppCompatActivity {
             gpsStatus = "GPS: ไม่อนุญาต";
             return null;
         }
-
         Location location = locationHelper.getBestLocation();
         if (location == null || LocationHelper.isStale(location)) {
             refreshLocation();
@@ -248,7 +298,6 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("กำลังเปิดกล้อง...");
         ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
         Executor mainExecutor = ContextCompat.getMainExecutor(this);
-
         future.addListener(() -> {
             try {
                 cameraProvider = future.get();
@@ -262,18 +311,12 @@ public class MainActivity extends AppCompatActivity {
     private void bindCameraUseCases() {
         if (cameraProvider == null || activeRecording != null) return;
 
-        CameraSelector selector = new CameraSelector.Builder()
-                .requireLensFacing(lensFacing)
-                .build();
-
+        CameraSelector selector = new CameraSelector.Builder().requireLensFacing(lensFacing).build();
         try {
             if (!cameraProvider.hasCamera(selector)) {
                 int fallback = lensFacing == CameraSelector.LENS_FACING_BACK
-                        ? CameraSelector.LENS_FACING_FRONT
-                        : CameraSelector.LENS_FACING_BACK;
-                CameraSelector fallbackSelector = new CameraSelector.Builder()
-                        .requireLensFacing(fallback)
-                        .build();
+                        ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
+                CameraSelector fallbackSelector = new CameraSelector.Builder().requireLensFacing(fallback).build();
                 if (!cameraProvider.hasCamera(fallbackSelector)) {
                     showError("อุปกรณ์นี้ไม่มีกล้องที่รองรับ");
                     return;
@@ -293,9 +336,7 @@ public class MainActivity extends AppCompatActivity {
                     Quality.FHD,
                     FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
             );
-            Recorder recorder = new Recorder.Builder()
-                    .setQualitySelector(qualitySelector)
-                    .build();
+            Recorder recorder = new Recorder.Builder().setQualitySelector(qualitySelector).build();
             videoCapture = VideoCapture.withOutput(recorder);
 
             if (activeCamera != null) {
@@ -303,16 +344,13 @@ public class MainActivity extends AppCompatActivity {
             }
 
             cameraProvider.unbindAll();
-            activeCamera = cameraProvider.bindToLifecycle(
-                    this,
-                    selector,
-                    preview,
-                    imageCapture,
-                    videoCapture
-            );
-
+            activeCamera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture, videoCapture);
             activeCamera.getCameraInfo().getZoomState().observe(this, this::updateZoomUi);
+
             setZoomRatio(1.0f);
+            applyFlashMode();
+            updateExposureUi();
+            updateFlashUi();
             setCameraControlsEnabled(true);
             updateCameraStatus();
         } catch (Exception e) {
@@ -322,44 +360,109 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateZoomUi(ZoomState state) {
         if (state == null) {
-            zoomText.setText("ซูม --");
+            zoomText.setText("ซูม -- • แตะภาพเพื่อโฟกัส");
             return;
         }
-
-        float zoom = state.getZoomRatio();
-        float min = state.getMinZoomRatio();
-        float max = state.getMaxZoomRatio();
-
         zoomText.setText(String.format(
                 Locale.US,
-                "ซูม %.1fx  •  ช่วง %.1f–%.1fx  •  บีบนิ้วบนภาพเพื่อซูม",
-                zoom,
-                min,
-                max
+                "ซูม %.1fx • แตะภาพเพื่อโฟกัส • บีบนิ้วเพื่อซูม",
+                state.getZoomRatio()
         ));
-
-        zoomOutButton.setEnabled(zoom > min + 0.01f);
-        zoomInButton.setEnabled(zoom < max - 0.01f);
-        zoomResetButton.setEnabled(Math.abs(zoom - 1.0f) > 0.01f);
-    }
-
-    private void multiplyZoom(float factor) {
-        if (activeCamera == null) return;
-        ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
-        if (state == null) return;
-        setZoomRatio(state.getZoomRatio() * factor);
     }
 
     private void setZoomRatio(float requestedRatio) {
         if (activeCamera == null) return;
         ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
         if (state == null) return;
+        float safe = Math.max(state.getMinZoomRatio(), Math.min(state.getMaxZoomRatio(), requestedRatio));
+        activeCamera.getCameraControl().setZoomRatio(safe);
+    }
 
-        float safeRatio = Math.max(
-                state.getMinZoomRatio(),
-                Math.min(state.getMaxZoomRatio(), requestedRatio)
+    private void focusAt(float x, float y) {
+        if (activeCamera == null) return;
+        try {
+            MeteringPoint point = previewView.getMeteringPointFactory().createPoint(x, y);
+            FocusMeteringAction action = new FocusMeteringAction.Builder(
+                    point,
+                    FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
+            ).setAutoCancelDuration(3, TimeUnit.SECONDS).build();
+            activeCamera.getCameraControl().startFocusAndMetering(action);
+            zoomText.setText("กำลังโฟกัสจุดที่แตะ...");
+            zoomText.postDelayed(() -> {
+                if (activeCamera != null) updateZoomUi(activeCamera.getCameraInfo().getZoomState().getValue());
+            }, 900L);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void adjustExposure(int delta) {
+        if (activeCamera == null) return;
+        ExposureState state = activeCamera.getCameraInfo().getExposureState();
+        int target = Math.max(
+                state.getExposureCompensationRange().getLower(),
+                Math.min(state.getExposureCompensationRange().getUpper(), state.getExposureCompensationIndex() + delta)
         );
-        activeCamera.getCameraControl().setZoomRatio(safeRatio);
+        activeCamera.getCameraControl().setExposureCompensationIndex(target)
+                .addListener(this::updateExposureUi, ContextCompat.getMainExecutor(this));
+    }
+
+    private void resetExposure() {
+        if (activeCamera == null) return;
+        activeCamera.getCameraControl().setExposureCompensationIndex(0)
+                .addListener(this::updateExposureUi, ContextCompat.getMainExecutor(this));
+    }
+
+    private void updateExposureUi() {
+        if (activeCamera == null) return;
+        ExposureState state = activeCamera.getCameraInfo().getExposureState();
+        int min = state.getExposureCompensationRange().getLower();
+        int max = state.getExposureCompensationRange().getUpper();
+        int index = state.getExposureCompensationIndex();
+        Rational step = state.getExposureCompensationStep();
+        float ev = index * step.floatValue();
+        exposureResetButton.setText(String.format(Locale.US, "EV %+.1f", ev));
+        boolean supported = min != 0 || max != 0;
+        exposureDownButton.setEnabled(supported && index > min && activeRecording == null);
+        exposureUpButton.setEnabled(supported && index < max && activeRecording == null);
+        exposureResetButton.setEnabled(supported && index != 0 && activeRecording == null);
+    }
+
+    private void cycleFlashMode() {
+        if (activeCamera == null || !activeCamera.getCameraInfo().hasFlashUnit()) {
+            Toast.makeText(this, "กล้องนี้ไม่มีแฟลช/ไฟฉายฮาร์ดแวร์", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (selectedFlashMode == ImageCapture.FLASH_MODE_AUTO) {
+            selectedFlashMode = ImageCapture.FLASH_MODE_ON;
+        } else if (selectedFlashMode == ImageCapture.FLASH_MODE_ON) {
+            selectedFlashMode = ImageCapture.FLASH_MODE_OFF;
+        } else {
+            selectedFlashMode = ImageCapture.FLASH_MODE_AUTO;
+        }
+        applyFlashMode();
+        updateFlashUi();
+    }
+
+    private void applyFlashMode() {
+        if (imageCapture == null) return;
+        if (activeCamera != null && activeCamera.getCameraInfo().hasFlashUnit()) {
+            imageCapture.setFlashMode(selectedFlashMode);
+        } else {
+            imageCapture.setFlashMode(ImageCapture.FLASH_MODE_OFF);
+        }
+    }
+
+    private void updateFlashUi() {
+        if (activeCamera == null || !activeCamera.getCameraInfo().hasFlashUnit()) {
+            flashButton.setText("ไม่มีแฟลช");
+            flashButton.setEnabled(false);
+            return;
+        }
+        String text = selectedFlashMode == ImageCapture.FLASH_MODE_ON
+                ? "แฟลช เปิด"
+                : selectedFlashMode == ImageCapture.FLASH_MODE_OFF ? "แฟลช ปิด" : "แฟลช Auto";
+        flashButton.setText(text);
+        flashButton.setEnabled(activeRecording == null);
     }
 
     private void switchCamera() {
@@ -370,8 +473,7 @@ public class MainActivity extends AppCompatActivity {
         setCameraControlsEnabled(false);
         zoomText.setText("กำลังสลับกล้อง...");
         lensFacing = lensFacing == CameraSelector.LENS_FACING_BACK
-                ? CameraSelector.LENS_FACING_FRONT
-                : CameraSelector.LENS_FACING_BACK;
+                ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
         bindCameraUseCases();
     }
 
@@ -385,10 +487,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
-                .format(new Date());
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
         String fileName = "IMG_" + stamp + ".jpg";
         String folder = folderStore.getCurrentFolder();
+        String roomLabel = FolderStore.displayName(folder);
         String relativePath = FolderStore.pictureRelativePath(folder);
         String displayPath = relativePath.substring(0, relativePath.length() - 1);
 
@@ -398,18 +500,14 @@ public class MainActivity extends AppCompatActivity {
 
         final File legacyPhotoFile;
         ImageCapture.OutputFileOptions options;
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             legacyPhotoFile = null;
             ContentValues values = new ContentValues();
             values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
             values.put(MediaStore.Images.Media.RELATIVE_PATH, relativePath);
-
             options = new ImageCapture.OutputFileOptions.Builder(
-                    getContentResolver(),
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    values
+                    getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
             ).setMetadata(metadata).build();
         } else {
             File dormDir = FolderStore.legacyPictureDir(folder);
@@ -418,52 +516,41 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             legacyPhotoFile = new File(dormDir, fileName);
-            options = new ImageCapture.OutputFileOptions.Builder(legacyPhotoFile)
-                    .setMetadata(metadata)
-                    .build();
+            options = new ImageCapture.OutputFileOptions.Builder(legacyPhotoFile).setMetadata(metadata).build();
         }
 
-        if (previewView.getDisplay() != null) {
-            imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
-        }
-
+        if (previewView.getDisplay() != null) imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
         boolean hasGps = currentCaptureLocation != null;
-        statusText.setText("กำลังบันทึกภาพ • " + displayPath + (hasGps ? " • GPS ✓" : " • ไม่มี GPS"));
+        statusText.setText("กำลังบันทึกภาพ → " + roomLabel + (hasGps ? " • GPS ✓" : " • ไม่มี GPS"));
         captureButton.setEnabled(false);
 
-        imageCapture.takePicture(
-                options,
-                ContextCompat.getMainExecutor(this),
-                new ImageCapture.OnImageSavedCallback() {
-                    @Override
-                    public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                        captureButton.setEnabled(true);
-
-                        if (legacyPhotoFile != null) {
-                            MediaScannerConnection.scanFile(
-                                    MainActivity.this,
-                                    new String[]{legacyPhotoFile.getAbsolutePath()},
-                                    new String[]{"image/jpeg"},
-                                    null
-                            );
-                        }
-
-                        statusText.setText("บันทึกภาพแล้ว • " + displayPath + (hasGps ? " • GPS ✓" : ""));
-                        Toast.makeText(
-                                MainActivity.this,
-                                "บันทึกภาพแล้ว\n" + displayPath + "\n" + fileName,
-                                Toast.LENGTH_LONG
-                        ).show();
-                        statusText.postDelayed(() -> updateCameraStatus(), 1500L);
-                    }
-
-                    @Override
-                    public void onError(@NonNull ImageCaptureException exception) {
-                        captureButton.setEnabled(true);
-                        showError("ถ่ายภาพไม่สำเร็จ: " + exception.getMessage());
-                    }
+        imageCapture.takePicture(options, ContextCompat.getMainExecutor(this), new ImageCapture.OnImageSavedCallback() {
+            @Override
+            public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
+                captureButton.setEnabled(true);
+                if (legacyPhotoFile != null) {
+                    MediaScannerConnection.scanFile(
+                            MainActivity.this,
+                            new String[]{legacyPhotoFile.getAbsolutePath()},
+                            new String[]{"image/jpeg"},
+                            null
+                    );
                 }
-        );
+                statusText.setText("บันทึกภาพแล้ว → " + roomLabel + (hasGps ? " • GPS ✓" : ""));
+                Toast.makeText(
+                        MainActivity.this,
+                        "บันทึกภาพแล้ว → " + roomLabel + "\n" + displayPath + "\n" + fileName,
+                        Toast.LENGTH_LONG
+                ).show();
+                statusText.postDelayed(MainActivity.this::updateCameraStatus, 1500L);
+            }
+
+            @Override
+            public void onError(@NonNull ImageCaptureException exception) {
+                captureButton.setEnabled(true);
+                showError("ถ่ายภาพไม่สำเร็จ: " + exception.getMessage());
+            }
+        });
     }
 
     private void toggleVideoRecording() {
@@ -473,38 +560,30 @@ public class MainActivity extends AppCompatActivity {
             activeRecording.stop();
             return;
         }
-
         if (videoCapture == null) {
             Toast.makeText(this, "วิดีโอยังไม่พร้อม", Toast.LENGTH_SHORT).show();
             return;
         }
-
         if (!hasAudioPermission()) {
             startVideoAfterAudioPermission = true;
-            ActivityCompat.requestPermissions(
-                    this,
-                    new String[]{Manifest.permission.RECORD_AUDIO},
-                    REQ_AUDIO
-            );
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
             return;
         }
-
         startVideoRecording();
     }
 
     private void startVideoRecording() {
         if (videoCapture == null || activeRecording != null) return;
 
-        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
-                .format(new Date());
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
         String fileName = "VID_" + stamp + ".mp4";
         String folder = folderStore.getCurrentFolder();
+        String roomLabel = FolderStore.displayName(folder);
         String relativePath = FolderStore.videoRelativePath(folder);
         String displayPath = relativePath.substring(0, relativePath.length() - 1);
 
         currentCaptureLocation = prepareLocationForCapture();
         Location videoLocation = currentCaptureLocation;
-
         PendingRecording pendingRecording;
         currentLegacyVideoFile = null;
 
@@ -513,12 +592,9 @@ public class MainActivity extends AppCompatActivity {
             values.put(MediaStore.Video.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             values.put(MediaStore.Video.Media.RELATIVE_PATH, relativePath);
-
             MediaStoreOutputOptions.Builder builder = new MediaStoreOutputOptions.Builder(
-                    getContentResolver(),
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    getContentResolver(), MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             ).setContentValues(values);
-
             if (videoLocation != null) builder.setLocation(videoLocation);
             pendingRecording = videoCapture.getOutput().prepareRecording(this, builder.build());
         } else {
@@ -533,28 +609,41 @@ public class MainActivity extends AppCompatActivity {
             pendingRecording = videoCapture.getOutput().prepareRecording(this, builder.build());
         }
 
-        if (hasAudioPermission()) {
-            pendingRecording = pendingRecording.withAudioEnabled();
+        if (hasAudioPermission()) pendingRecording = pendingRecording.withAudioEnabled();
+
+        if (activeCamera != null && activeCamera.getCameraInfo().hasFlashUnit()) {
+            activeCamera.getCameraControl().enableTorch(selectedFlashMode == ImageCapture.FLASH_MODE_ON);
         }
 
         captureButton.setEnabled(false);
         switchButton.setEnabled(false);
         folderButton.setEnabled(false);
         explorerButton.setEnabled(false);
+        folderBanner.setEnabled(false);
+        flashButton.setEnabled(false);
+        exposureDownButton.setEnabled(false);
+        exposureResetButton.setEnabled(false);
+        exposureUpButton.setEnabled(false);
         videoButton.setEnabled(true);
         videoButton.setText("หยุดวิดีโอ");
 
         final boolean hasGps = videoLocation != null;
         activeRecording = pendingRecording.start(
                 ContextCompat.getMainExecutor(this),
-                event -> handleVideoEvent(event, fileName, displayPath, hasGps)
+                event -> handleVideoEvent(event, fileName, displayPath, roomLabel, hasGps)
         );
     }
 
-    private void handleVideoEvent(VideoRecordEvent event, String fileName, String displayPath, boolean hasGps) {
+    private void handleVideoEvent(
+            VideoRecordEvent event,
+            String fileName,
+            String displayPath,
+            String roomLabel,
+            boolean hasGps
+    ) {
         if (event instanceof VideoRecordEvent.Start) {
             String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
-            statusText.setText("กำลังบันทึกวิดีโอ • " + side + " • " + displayPath + (hasGps ? " • GPS ✓" : ""));
+            statusText.setText("กำลังบันทึกวิดีโอ • " + side + " → " + roomLabel + (hasGps ? " • GPS ✓" : ""));
             return;
         }
 
@@ -567,6 +656,9 @@ public class MainActivity extends AppCompatActivity {
                 activeRecording.close();
                 activeRecording = null;
             }
+            if (activeCamera != null && activeCamera.getCameraInfo().hasFlashUnit()) {
+                activeCamera.getCameraControl().enableTorch(false);
+            }
 
             videoButton.setEnabled(true);
             videoButton.setText("วิดีโอ");
@@ -574,11 +666,9 @@ public class MainActivity extends AppCompatActivity {
             switchButton.setEnabled(true);
             folderButton.setEnabled(true);
             explorerButton.setEnabled(true);
-
-            ZoomState state = activeCamera != null
-                    ? activeCamera.getCameraInfo().getZoomState().getValue()
-                    : null;
-            updateZoomUi(state);
+            folderBanner.setEnabled(true);
+            updateExposureUi();
+            updateFlashUi();
 
             if (finalizeEvent.hasError()) {
                 showError("บันทึกวิดีโอไม่สำเร็จ (error " + finalizeEvent.getError() + ")");
@@ -594,14 +684,68 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
 
-            statusText.setText("บันทึกวิดีโอแล้ว • " + displayPath + (hasGps ? " • GPS ✓" : ""));
+            statusText.setText("บันทึกวิดีโอแล้ว → " + roomLabel + (hasGps ? " • GPS ✓" : ""));
             Toast.makeText(
                     this,
-                    "บันทึกวิดีโอแล้ว\n" + displayPath + "\n" + fileName,
+                    "บันทึกวิดีโอแล้ว → " + roomLabel + "\n" + displayPath + "\n" + fileName,
                     Toast.LENGTH_LONG
             ).show();
             statusText.postDelayed(this::updateCameraStatus, 1500L);
         }
+    }
+
+    private void showQuickFolderDialog() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดวิดีโอก่อนเปลี่ยนห้อง", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        List<String> folders = folderStore.getKnownFolders();
+        List<String> labels = new ArrayList<>();
+        for (String folder : folders) labels.add(FolderStore.displayName(folder));
+        labels.add("+ สร้างโฟลเดอร์ใหม่...");
+
+        String current = folderStore.getCurrentFolder();
+        boolean locked = folderStore.isLocked();
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("เปลี่ยนห้องด่วน • ปัจจุบัน: " + FolderStore.displayName(current) + (locked ? " 🔒" : ""))
+                .setItems(labels.toArray(new String[0]), (d, which) -> {
+                    if (which == folders.size()) {
+                        if (locked) {
+                            Toast.makeText(this, "โฟลเดอร์ถูกล็อก กรุณาปลดล็อกก่อนสร้างใหม่", Toast.LENGTH_LONG).show();
+                        } else {
+                            showCreateFolderDialog();
+                        }
+                        return;
+                    }
+
+                    String target = folders.get(which);
+                    if (target.equals(current)) return;
+                    if (locked) {
+                        confirmUnlockAndSwitch(target);
+                    } else {
+                        folderStore.setCurrentFolder(target);
+                        updateCameraStatus();
+                        Toast.makeText(this, "เปลี่ยนเป็น: " + FolderStore.displayName(target), Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .create();
+        dialog.show();
+    }
+
+    private void confirmUnlockAndSwitch(@NonNull String target) {
+        new AlertDialog.Builder(this)
+                .setTitle("โฟลเดอร์ถูกล็อก")
+                .setMessage("ต้องการปลดล็อกและเปลี่ยนไป “" + FolderStore.displayName(target) + "” หรือไม่?")
+                .setPositiveButton("ปลดล็อกและเปลี่ยน", (d, w) -> {
+                    folderStore.setLocked(false);
+                    folderStore.setCurrentFolder(target);
+                    updateCameraStatus();
+                    Toast.makeText(this, "เปลี่ยนเป็น: " + FolderStore.displayName(target), Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
     }
 
     private void showFolderMenu() {
@@ -609,7 +753,6 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "หยุดวิดีโอก่อนจัดการโฟลเดอร์", Toast.LENGTH_SHORT).show();
             return;
         }
-
         boolean locked = folderStore.isLocked();
         String current = FolderStore.displayName(folderStore.getCurrentFolder());
         String lockAction = locked ? "ปลดล็อกโฟลเดอร์" : "ล็อกโฟลเดอร์ปัจจุบัน";
@@ -619,7 +762,6 @@ public class MainActivity extends AppCompatActivity {
                 "เปลี่ยนชื่อโฟลเดอร์ปัจจุบัน",
                 lockAction
         };
-
         new AlertDialog.Builder(this)
                 .setTitle("โฟลเดอร์บันทึก: " + current + (locked ? " 🔒" : ""))
                 .setItems(choices, (dialog, which) -> {
@@ -637,7 +779,6 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
             return;
         }
-
         List<String> folders = folderStore.getKnownFolders();
         String[] labels = new String[folders.size()];
         int checked = 0;
@@ -646,7 +787,6 @@ public class MainActivity extends AppCompatActivity {
             labels[i] = FolderStore.displayName(folders.get(i));
             if (folders.get(i).equals(current)) checked = i;
         }
-
         final int[] selected = new int[]{checked};
         new AlertDialog.Builder(this)
                 .setTitle("เลือกโฟลเดอร์บันทึก")
@@ -664,15 +804,13 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
             return;
         }
-
         EditText input = new EditText(this);
-        input.setHint("เช่น ห้อง101 หรือ งานวันที่13");
+        input.setHint("เช่น ห้อง15 หรือ ห้อง20");
         input.setSingleLine(true);
-
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("สร้างโฟลเดอร์ใหม่")
                 .setView(input)
-                .setPositiveButton("สร้างและใช้", (dialog, which) -> {
+                .setPositiveButton("สร้างและใช้", (d, which) -> {
                     String name = FolderStore.normalize(input.getText().toString());
                     if (name.isEmpty()) {
                         Toast.makeText(this, "กรุณาใส่ชื่อโฟลเดอร์", Toast.LENGTH_SHORT).show();
@@ -684,7 +822,12 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "ใช้โฟลเดอร์: " + name, Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("ยกเลิก", null)
-                .show();
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFF1565C0);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFF555555);
+        });
+        dialog.show();
     }
 
     private void showRenameFolderDialog() {
@@ -692,34 +835,35 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
             return;
         }
-
         String oldName = folderStore.getCurrentFolder();
         if (oldName.isEmpty()) {
             Toast.makeText(this, "โฟลเดอร์หลักเปลี่ยนชื่อไม่ได้ ให้สร้างโฟลเดอร์ใหม่แทน", Toast.LENGTH_LONG).show();
             return;
         }
-
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setText(oldName);
         input.setSelection(input.length());
-
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("เปลี่ยนชื่อโฟลเดอร์")
                 .setView(input)
-                .setPositiveButton("เปลี่ยนชื่อ", (dialog, which) -> {
+                .setPositiveButton("เปลี่ยนชื่อ", (d, which) -> {
                     String newName = FolderStore.normalize(input.getText().toString());
                     if (newName.isEmpty() || newName.equals(oldName)) return;
                     renameFolderOnStorage(oldName, newName);
                 })
                 .setNegativeButton("ยกเลิก", null)
-                .show();
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFF1565C0);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFF555555);
+        });
+        dialog.show();
     }
 
     private void renameFolderOnStorage(@NonNull String oldName, @NonNull String newName) {
         folderButton.setEnabled(false);
         statusText.setText("กำลังเปลี่ยนชื่อโฟลเดอร์...");
-
         new Thread(() -> {
             boolean success;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -734,16 +878,9 @@ public class MainActivity extends AppCompatActivity {
                         FolderStore.videoRelativePath(newName)
                 ) && success;
             } else {
-                success = renameLegacyDir(
-                        FolderStore.legacyPictureDir(oldName),
-                        FolderStore.legacyPictureDir(newName)
-                );
-                success = renameLegacyDir(
-                        FolderStore.legacyVideoDir(oldName),
-                        FolderStore.legacyVideoDir(newName)
-                ) && success;
+                success = renameLegacyDir(FolderStore.legacyPictureDir(oldName), FolderStore.legacyPictureDir(newName));
+                success = renameLegacyDir(FolderStore.legacyVideoDir(oldName), FolderStore.legacyVideoDir(newName)) && success;
             }
-
             boolean finalSuccess = success;
             runOnUiThread(() -> {
                 folderButton.setEnabled(true);
@@ -786,11 +923,7 @@ public class MainActivity extends AppCompatActivity {
         boolean locked = !folderStore.isLocked();
         folderStore.setLocked(locked);
         updateCameraStatus();
-        Toast.makeText(
-                this,
-                locked ? "ล็อกโฟลเดอร์บันทึกแล้ว" : "ปลดล็อกโฟลเดอร์แล้ว",
-                Toast.LENGTH_SHORT
-        ).show();
+        Toast.makeText(this, locked ? "ล็อกโฟลเดอร์บันทึกแล้ว" : "ปลดล็อกโฟลเดอร์แล้ว", Toast.LENGTH_SHORT).show();
     }
 
     private void openExplorer() {
@@ -806,11 +939,10 @@ public class MainActivity extends AppCompatActivity {
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
         String folder = FolderStore.displayName(folderStore.getCurrentFolder());
         String lock = folderStore.isLocked() ? " 🔒" : "";
-        statusText.setText(
-                "Dorm Camera • " + side
-                        + " • " + gpsStatus
-                        + " • โฟลเดอร์: " + folder + lock
-        );
+        statusText.setText("Dorm Camera • " + side + " • " + gpsStatus);
+        if (folderBanner != null) {
+            folderBanner.setText("โฟลเดอร์บันทึก:  " + folder + lock + "   •   แตะเพื่อเปลี่ยนด่วน");
+        }
     }
 
     private void showError(String message) {
@@ -839,11 +971,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQ_AUDIO && startVideoAfterAudioPermission) {
             startVideoAfterAudioPermission = false;
             if (!hasAudioPermission()) {
-                Toast.makeText(
-                        this,
-                        "ไม่ได้อนุญาตไมโครโฟน — จะบันทึกวิดีโอแบบไม่มีเสียง",
-                        Toast.LENGTH_LONG
-                ).show();
+                Toast.makeText(this, "ไม่ได้อนุญาตไมโครโฟน — จะบันทึกวิดีโอแบบไม่มีเสียง", Toast.LENGTH_LONG).show();
             }
             startVideoRecording();
             return;
