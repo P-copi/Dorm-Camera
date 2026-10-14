@@ -49,8 +49,9 @@ jobs:
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/badging.txt
           grep -q "versionCode='21'" /tmp/badging.txt
           grep -q "versionName='0.1.20'" /tmp/badging.txt
-          grep -q "launchable-activity: name='com.pcopi.dormcamera.DormCameraLauncher'" /tmp/badging.txt
+          grep -q "launchable-activity: name='com.pcopi.dormcamera.BrandSplashActivity'" /tmp/badging.txt
           grep -q "application-icon-" /tmp/badging.txt
+          grep -q "icon='res/drawable/dorm_camera_logo.xml'" /tmp/badging.txt
 
       - name: Prepare permanent signing key
         shell: bash
@@ -81,8 +82,9 @@ jobs:
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/release-badging.txt
           grep -q "versionCode='21'" /tmp/release-badging.txt
           grep -q "versionName='0.1.20'" /tmp/release-badging.txt
-          grep -q "launchable-activity: name='com.pcopi.dormcamera.DormCameraLauncher'" /tmp/release-badging.txt
+          grep -q "launchable-activity: name='com.pcopi.dormcamera.BrandSplashActivity'" /tmp/release-badging.txt
           grep -q "application-icon-" /tmp/release-badging.txt
+          grep -q "icon='res/drawable/dorm_camera_logo.xml'" /tmp/release-badging.txt
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
