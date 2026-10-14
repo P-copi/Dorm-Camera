@@ -4,48 +4,58 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#070707"
+    android:background="#050506"
     android:paddingTop="4dp">
 
-    <TextView
+    <com.pcopi.dormcamera.PressFeedbackButton
         android:id="@+id/folderBanner"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
         android:layout_marginTop="4dp"
+        android:minHeight="0dp"
         android:gravity="center"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
         android:text="📁  หลัก   ›"
+        android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="18sp"
+        android:textSize="17sp"
         android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
         android:background="@drawable/bg_folder_banner"
-        android:clickable="true"
-        android:focusable="true" />
+        android:backgroundTint="@null"
+        android:stateListAnimator="@null" />
 
     <TextView
         android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="5dp"
         android:gravity="center"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
+        android:minWidth="210dp"
+        android:maxWidth="match_parent"
+        android:paddingStart="13dp"
+        android:paddingEnd="13dp"
         android:text="กล้องหลัง  •  GPS กำลังตรวจสอบ"
-        android:textColor="#CFCFCF"
-        android:textSize="12sp" />
+        android:textColor="#E6E6EA"
+        android:textSize="11.5sp"
+        android:fontFamily="sans-serif-medium"
+        android:background="@drawable/bg_status_chip" />
 
     <FrameLayout
         android:id="@+id/previewContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginStart="4dp"
-        android:layout_marginEnd="4dp"
-        android:background="#000000">
+        android:layout_marginStart="7dp"
+        android:layout_marginEnd="7dp"
+        android:layout_marginBottom="6dp"
+        android:background="@drawable/bg_preview_frame"
+        android:clipToOutline="true">
 
         <androidx.camera.view.PreviewView
             android:id="@+id/previewView"
@@ -61,26 +71,27 @@
             android:visibility="gone"
             android:background="@drawable/bg_focus_ring" />
 
-        <Chronometer
+        <com.pcopi.dormcamera.PulseChronometer
             android:id="@+id/recordingTimer"
             android:layout_width="wrap_content"
-            android:layout_height="38dp"
+            android:layout_height="36dp"
             android:layout_gravity="top|center_horizontal"
             android:layout_marginTop="12dp"
             android:gravity="center"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
-            android:format="● REC  %s"
-            android:textColor="#FF5252"
-            android:textSize="15sp"
+            android:format="●  REC  %s"
+            android:textColor="#FF646F"
+            android:textSize="14sp"
             android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
             android:visibility="gone"
             android:background="@drawable/bg_recording_badge" />
 
         <LinearLayout
             android:id="@+id/latestMediaPanel"
-            android:layout_width="78dp"
-            android:layout_height="92dp"
+            android:layout_width="80dp"
+            android:layout_height="94dp"
             android:layout_gravity="bottom|start"
             android:layout_marginStart="12dp"
             android:layout_marginBottom="12dp"
@@ -92,43 +103,50 @@
                 android:layout_width="72dp"
                 android:layout_height="72dp"
                 android:padding="2dp"
+                android:clipToOutline="true"
+                android:elevation="7dp"
                 android:background="@drawable/bg_thumbnail_frame" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="20dp"
+                android:layout_marginTop="2dp"
                 android:gravity="center"
                 android:text="ล่าสุด"
                 android:textColor="#FFFFFF"
-                android:textSize="11sp"
+                android:textSize="10.5sp"
                 android:background="@drawable/bg_info_chip"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
+                android:paddingStart="9dp"
+                android:paddingEnd="9dp" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/zoomText"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
+            android:layout_height="32dp"
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="14dp"
             android:gravity="center"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp"
             android:text="1.0×  •  แตะโฟกัส  •  บีบซูม"
             android:textColor="#FFFFFF"
-            android:textSize="12sp"
+            android:textSize="11.5sp"
+            android:fontFamily="sans-serif-medium"
             android:background="@drawable/bg_info_chip" />
     </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="7dp"
+        android:layout_marginEnd="7dp"
+        android:layout_marginBottom="7dp"
         android:orientation="vertical"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:paddingTop="7dp"
-        android:paddingBottom="8dp"
+        android:paddingStart="9dp"
+        android:paddingEnd="9dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp"
         android:background="@drawable/bg_control_panel">
 
         <LinearLayout
@@ -137,56 +155,68 @@
             android:orientation="horizontal"
             android:gravity="center">
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/exposureDownButton"
                 android:layout_width="0dp"
-                android:layout_height="42dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:minHeight="0dp"
                 android:padding="0dp"
-                android:text="− แสง"
+                android:text="−  แสง"
+                android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:background="@drawable/bg_button_dark" />
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/exposureResetButton"
                 android:layout_width="0dp"
-                android:layout_height="42dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="5dp"
                 android:minHeight="0dp"
                 android:padding="0dp"
                 android:text="EV 0.0"
+                android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:background="@drawable/bg_button_dark" />
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/exposureUpButton"
                 android:layout_width="0dp"
-                android:layout_height="42dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="5dp"
                 android:minHeight="0dp"
                 android:padding="0dp"
-                android:text="+ แสง"
+                android:text="+  แสง"
+                android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:background="@drawable/bg_button_dark" />
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/flashButton"
                 android:layout_width="0dp"
-                android:layout_height="42dp"
-                android:layout_weight="1.2"
-                android:layout_marginStart="4dp"
+                android:layout_height="40dp"
+                android:layout_weight="1.15"
+                android:layout_marginStart="5dp"
                 android:minHeight="0dp"
                 android:padding="0dp"
                 android:text="⚡ Auto"
+                android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:background="@drawable/bg_button_dark" />
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
         </LinearLayout>
 
         <LinearLayout
@@ -195,74 +225,96 @@
             android:layout_marginTop="6dp"
             android:orientation="horizontal">
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/folderButton"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:minHeight="0dp"
                 android:text="จัดการห้อง"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:background="@drawable/bg_button_dark" />
+                android:textAllCaps="false"
+                android:textColor="#EDEDF2"
+                android:textSize="12sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/explorerButton"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
                 android:minHeight="0dp"
                 android:text="Explorer"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:background="@drawable/bg_button_dark" />
+                android:textAllCaps="false"
+                android:textColor="#EDEDF2"
+                android:textSize="12sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="7dp"
+            android:layout_height="94dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center">
 
-            <Button
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/switchButton"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_weight="0.9"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:minWidth="0dp"
                 android:minHeight="0dp"
-                android:text="↻ กล้อง"
+                android:padding="0dp"
+                android:text="↻"
+                android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_button_dark" />
+                android:textSize="29sp"
+                android:contentDescription="สลับกล้อง"
+                android:background="@drawable/bg_button_switch"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-            <Button
+            <Space
+                android:layout_width="30dp"
+                android:layout_height="1dp" />
+
+            <com.pcopi.dormcamera.PressFeedbackButton
                 android:id="@+id/captureButton"
-                android:layout_width="0dp"
-                android:layout_height="60dp"
-                android:layout_weight="1.15"
-                android:layout_marginStart="7dp"
+                android:layout_width="86dp"
+                android:layout_height="86dp"
+                android:minWidth="0dp"
                 android:minHeight="0dp"
-                android:text="ถ่ายภาพ"
-                android:textColor="#111111"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_button_photo" />
+                android:padding="0dp"
+                android:text=""
+                android:contentDescription="ถ่ายภาพ"
+                android:background="@drawable/bg_button_photo"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-            <Button
+            <Space
+                android:layout_width="30dp"
+                android:layout_height="1dp" />
+
+            <com.pcopi.dormcamera.VideoControlButton
                 android:id="@+id/videoButton"
-                android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_weight="1.0"
-                android:layout_marginStart="7dp"
+                android:layout_width="68dp"
+                android:layout_height="68dp"
+                android:minWidth="0dp"
                 android:minHeight="0dp"
-                android:text="● วิดีโอ"
+                android:padding="0dp"
+                android:text="●"
+                android:textAllCaps="false"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:textSize="24sp"
                 android:textStyle="bold"
-                android:background="@drawable/bg_button_video" />
+                android:contentDescription="เริ่มบันทึกวิดีโอ"
+                android:background="@drawable/bg_button_video"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

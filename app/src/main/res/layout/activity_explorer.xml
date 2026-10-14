@@ -3,28 +3,41 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#000000">
+    android:background="#050506"
+    android:paddingTop="6dp">
 
-    <TextView
-        android:id="@+id/folderTitle"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="10dp"
-        android:text="Explorer"
-        android:textColor="#FFFFFF"
-        android:textSize="17sp"
-        android:textStyle="bold" />
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="7dp"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="10dp"
+        android:background="@drawable/bg_explorer_header">
 
-    <TextView
-        android:id="@+id/countText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="8dp"
-        android:text="กำลังอ่านรายการ..."
-        android:textColor="#DDDDDD"
-        android:textSize="13sp" />
+        <TextView
+            android:id="@+id/folderTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Explorer"
+            android:textColor="#FFFFFF"
+            android:textSize="19sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/countText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="กำลังอ่านรายการ..."
+            android:textColor="#B9BAC2"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <GridView
         android:id="@+id/mediaGrid"
@@ -32,66 +45,111 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:numColumns="3"
-        android:horizontalSpacing="3dp"
-        android:verticalSpacing="3dp"
+        android:horizontalSpacing="6dp"
+        android:verticalSpacing="6dp"
         android:stretchMode="columnWidth"
-        android:padding="3dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="8dp"
         android:clipToPadding="false" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="5dp"
-        android:background="#111111">
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:background="@drawable/bg_explorer_toolbar">
 
-        <Button
-            android:id="@+id/selectAllButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:text="เลือกทั้งหมด" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/clearButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:text="ล้างเลือก" />
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/selectAllButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:minHeight="0dp"
+                android:text="เลือกทั้งหมด"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-        <Button
-            android:id="@+id/refreshButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:text="รีเฟรช" />
-    </LinearLayout>
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/clearButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:layout_marginStart="5dp"
+                android:minHeight="0dp"
+                android:text="ล้างเลือก"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingStart="5dp"
-        android:paddingEnd="5dp"
-        android:paddingBottom="6dp"
-        android:background="#111111">
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/refreshButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:layout_marginStart="5dp"
+                android:minHeight="0dp"
+                android:text="↻ รีเฟรช"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="11.5sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
+        </LinearLayout>
 
-        <Button
-            android:id="@+id/toolsButton"
-            android:layout_width="0dp"
-            android:layout_height="50dp"
-            android:layout_weight="2"
-            android:text="เครื่องมือ"
-            android:enabled="false" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/closeButton"
-            android:layout_width="0dp"
-            android:layout_height="50dp"
-            android:layout_weight="1"
-            android:layout_marginStart="4dp"
-            android:text="กลับ" />
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/toolsButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="2"
+                android:minHeight="0dp"
+                android:text="เครื่องมือ"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:enabled="false"
+                android:background="@drawable/bg_tools_accent"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
+
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/closeButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginStart="7dp"
+                android:minHeight="0dp"
+                android:text="กลับ"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -5,6 +5,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.MediaStore;
@@ -21,6 +24,10 @@ import java.util.concurrent.Executors;
 
 public final class LatestMediaView extends AppCompatImageView {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Paint badgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint playPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path playPath = new Path();
+
     private FolderStore folderStore;
     private int generation = 0;
     private MediaRef current;
@@ -46,6 +53,9 @@ public final class LatestMediaView extends AppCompatImageView {
         setContentDescription("สื่อล่าสุด");
         setVisibility(View.INVISIBLE);
         setOnClickListener(v -> openCurrent());
+        badgePaint.setColor(0xCC000000);
+        playPaint.setColor(0xFFFFFFFF);
+        playPaint.setStyle(Paint.Style.FILL);
     }
 
     public void refresh() {
@@ -59,12 +69,37 @@ public final class LatestMediaView extends AppCompatImageView {
                 if (latest == null) {
                     setImageDrawable(null);
                     setVisibility(View.INVISIBLE);
+                    invalidate();
                     return;
                 }
                 if (thumb != null) setImageBitmap(thumb);
                 setVisibility(View.VISIBLE);
+                invalidate();
             });
         });
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        MediaRef ref = current;
+        if (ref == null || !ref.video || getVisibility() != View.VISIBLE) return;
+
+        float r = dp(13f);
+        float cx = getWidth() - dp(17f);
+        float cy = getHeight() - dp(17f);
+        canvas.drawCircle(cx, cy, r, badgePaint);
+
+        playPath.reset();
+        playPath.moveTo(cx - dp(4f), cy - dp(6f));
+        playPath.lineTo(cx - dp(4f), cy + dp(6f));
+        playPath.lineTo(cx + dp(6f), cy);
+        playPath.close();
+        canvas.drawPath(playPath, playPaint);
+    }
+
+    private float dp(float value) {
+        return value * getResources().getDisplayMetrics().density;
     }
 
     @Nullable
@@ -169,6 +204,7 @@ public final class LatestMediaView extends AppCompatImageView {
     private void openCurrent() {
         MediaRef ref = current;
         if (ref == null) return;
+        performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
         Intent intent = new Intent(getContext(), PreviewActivity.class);
         intent.putExtra(PreviewActivity.EXTRA_URI, ref.uri.toString());
         intent.putExtra(PreviewActivity.EXTRA_MIME, ref.mimeType);
