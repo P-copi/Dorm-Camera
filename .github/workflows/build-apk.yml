@@ -47,9 +47,9 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/badging.txt
-          grep -q "versionCode='18'" /tmp/badging.txt
-          grep -q "versionName='0.1.17'" /tmp/badging.txt
-          grep -q "launchable-activity: name='com.pcopi.dormcamera.MainActivity'" /tmp/badging.txt
+          grep -q "versionCode='19'" /tmp/badging.txt
+          grep -q "versionName='0.1.18'" /tmp/badging.txt
+          grep -q "launchable-activity: name='com.pcopi.dormcamera.SplashActivity'" /tmp/badging.txt
 
       - name: Prepare permanent signing key
         shell: bash
@@ -78,14 +78,14 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/signature.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/release-badging.txt
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/release-badging.txt
-          grep -q "versionCode='18'" /tmp/release-badging.txt
-          grep -q "versionName='0.1.17'" /tmp/release-badging.txt
-          grep -q "launchable-activity: name='com.pcopi.dormcamera.MainActivity'" /tmp/release-badging.txt
+          grep -q "versionCode='19'" /tmp/release-badging.txt
+          grep -q "versionName='0.1.18'" /tmp/release-badging.txt
+          grep -q "launchable-activity: name='com.pcopi.dormcamera.SplashActivity'" /tmp/release-badging.txt
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dorm-Camera-V0.1.17-Compact-Preview-Save-Banner-Video-Thumbnail-Permanent-Signed
+          name: Dorm-Camera-V0.1.18-Branding-Integration-Permanent-Signed
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 7

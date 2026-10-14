@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/splashRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_splash_branding">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingStart="28dp"
+        android:paddingEnd="28dp"
+        android:translationY="-18dp">
+
+        <ImageView
+            android:layout_width="176dp"
+            android:layout_height="176dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/brand_icon"
+            android:contentDescription="Dorm Camera" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="Dorm Camera"
+            android:textColor="#F3C76D"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.025"
+            android:shadowColor="#AA9B6825"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="8" />
+
+        <View
+            android:layout_width="124dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="12dp"
+            android:background="#66E4B654" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="by.P"
+            android:textColor="#E5B55A"
+            android:textSize="24sp"
+            android:fontFamily="cursive"
+            android:textStyle="italic"
+            android:shadowColor="#889B6825"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="6" />
+    </LinearLayout>
+</FrameLayout>

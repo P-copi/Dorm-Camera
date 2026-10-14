@@ -17,6 +17,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@drawable/brand_icon"
+        android:roundIcon="@drawable/brand_icon"
         android:label="Dorm Camera"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
@@ -34,7 +36,14 @@
         <activity
             android:name=".MainActivity"
             android:screenOrientation="portrait"
-            android:exported="true">
+            android:exported="false" />
+
+        <activity
+            android:name=".SplashActivity"
+            android:screenOrientation="portrait"
+            android:noHistory="true"
+            android:exported="true"
+            android:theme="@style/SplashTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
