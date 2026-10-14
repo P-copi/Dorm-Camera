@@ -26,11 +26,15 @@ public final class VideoControlButton extends PressFeedbackButton {
         if (raw.contains("กำลังหยุด") || raw.contains("■")) {
             super.setText("■", type);
             setContentDescription("หยุดวิดีโอ");
+            setActivated(true);
         } else if (raw.contains("วิดีโอ") || raw.contains("●")) {
             super.setText("●", type);
             setContentDescription("เริ่มบันทึกวิดีโอ");
+            setActivated(false);
         } else {
             super.setText(text, type);
+            setActivated(false);
         }
+        refreshDrawableState();
     }
 }
