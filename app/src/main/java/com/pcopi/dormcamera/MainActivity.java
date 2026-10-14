@@ -79,7 +79,9 @@ public class MainActivity extends AppCompatActivity {
     private Button explorerButton;
     private View focusIndicator;
     private Chronometer recordingTimer;
+    private TextView saveBanner;
     private LatestMediaView latestMediaView;
+    private Runnable hideSaveBannerRunnable;
 
     private ProcessCameraProvider cameraProvider;
     private ImageCapture imageCapture;
@@ -121,6 +123,7 @@ public class MainActivity extends AppCompatActivity {
         explorerButton = findViewById(R.id.explorerButton);
         focusIndicator = findViewById(R.id.focusIndicator);
         recordingTimer = findViewById(R.id.recordingTimer);
+        saveBanner = findViewById(R.id.saveBanner);
         latestMediaView = findViewById(R.id.latestMediaView);
 
         locationHelper = new LocationHelper(this);
@@ -571,12 +574,8 @@ public class MainActivity extends AppCompatActivity {
                             null
                     );
                 }
-                statusText.setText("บันทึกภาพแล้ว → " + roomLabel + (hasGps ? "  •  GPS ✓" : ""));
-                Toast.makeText(
-                        MainActivity.this,
-                        "บันทึกภาพแล้ว → " + roomLabel + "\n" + displayPath + "\n" + fileName,
-                        Toast.LENGTH_LONG
-                ).show();
+                statusText.setText("บันทึกภาพแล้ว ✓");
+                showSaveBanner("บันทึกภาพแล้ว", roomLabel);
                 if (latestMediaView != null) latestMediaView.postDelayed(latestMediaView::refresh, 450L);
                 statusText.postDelayed(MainActivity.this::updateCameraStatus, 1500L);
             }
@@ -683,6 +682,35 @@ public class MainActivity extends AppCompatActivity {
         recordingTimer.setVisibility(View.GONE);
     }
 
+    private void showSaveBanner(String message, String roomLabel) {
+        if (saveBanner == null) return;
+        if (hideSaveBannerRunnable != null) {
+            saveBanner.removeCallbacks(hideSaveBannerRunnable);
+        }
+        saveBanner.animate().cancel();
+        saveBanner.setText("✓  " + message + "  •  " + roomLabel);
+        saveBanner.setAlpha(0f);
+        saveBanner.setTranslationY(dp(10));
+        saveBanner.setScaleX(0.96f);
+        saveBanner.setScaleY(0.96f);
+        saveBanner.setVisibility(View.VISIBLE);
+        saveBanner.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(160L)
+                .start();
+
+        hideSaveBannerRunnable = () -> saveBanner.animate()
+                .alpha(0f)
+                .translationY(dp(8))
+                .setDuration(220L)
+                .withEndAction(() -> saveBanner.setVisibility(View.GONE))
+                .start();
+        saveBanner.postDelayed(hideSaveBannerRunnable, 1300L);
+    }
+
     private void handleVideoEvent(
             VideoRecordEvent event,
             String fileName,
@@ -735,12 +763,8 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
 
-            statusText.setText("บันทึกวิดีโอแล้ว → " + roomLabel + (hasGps ? "  •  GPS ✓" : ""));
-            Toast.makeText(
-                    this,
-                    "บันทึกวิดีโอแล้ว → " + roomLabel + "\n" + displayPath + "\n" + fileName,
-                    Toast.LENGTH_LONG
-            ).show();
+            statusText.setText("บันทึกวิดีโอแล้ว ✓");
+            showSaveBanner("บันทึกวิดีโอแล้ว", roomLabel);
             if (latestMediaView != null) latestMediaView.postDelayed(latestMediaView::refresh, 650L);
             statusText.postDelayed(this::updateCameraStatus, 1500L);
         }
@@ -1063,6 +1087,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         stopRecordingIndicator();
+        if (saveBanner != null && hideSaveBannerRunnable != null) {
+            saveBanner.removeCallbacks(hideSaveBannerRunnable);
+        }
         if (activeRecording != null) activeRecording.stop();
         super.onDestroy();
     }
