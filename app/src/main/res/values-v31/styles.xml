@@ -10,7 +10,7 @@
         <item name="android:windowBackground">#050506</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowSplashScreenBackground">#050506</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/brand_icon</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/dorm_camera_logo</item>
         <item name="android:windowSplashScreenAnimationDuration">220</item>
         <item name="colorAccent">#D8A94D</item>
         <item name="android:colorAccent">#D8A94D</item>
