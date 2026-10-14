@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,6 +24,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.GridView;
 import android.widget.ImageView;
+import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,6 +35,10 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -44,6 +50,11 @@ import java.util.concurrent.Executors;
 
 public class ExplorerActivity extends AppCompatActivity {
     private static final int REQ_LEGACY_READ = 2001;
+    private static final int MENU_SHARE = 1;
+    private static final int MENU_COPY = 2;
+    private static final int MENU_MOVE = 3;
+    private static final int MENU_RENAME = 4;
+    private static final int MENU_DELETE = 5;
 
     private TextView folderTitle;
     private TextView countText;
@@ -51,9 +62,7 @@ public class ExplorerActivity extends AppCompatActivity {
     private Button selectAllButton;
     private Button clearButton;
     private Button refreshButton;
-    private Button shareButton;
-    private Button renameButton;
-    private Button deleteButton;
+    private Button toolsButton;
     private Button closeButton;
 
     private final List<MediaItem> items = new ArrayList<>();
@@ -73,9 +82,7 @@ public class ExplorerActivity extends AppCompatActivity {
         selectAllButton = findViewById(R.id.selectAllButton);
         clearButton = findViewById(R.id.clearButton);
         refreshButton = findViewById(R.id.refreshButton);
-        shareButton = findViewById(R.id.shareButton);
-        renameButton = findViewById(R.id.renameButton);
-        deleteButton = findViewById(R.id.deleteButton);
+        toolsButton = findViewById(R.id.toolsButton);
         closeButton = findViewById(R.id.closeButton);
 
         folderStore = new FolderStore(this);
@@ -86,9 +93,7 @@ public class ExplorerActivity extends AppCompatActivity {
         selectAllButton.setOnClickListener(v -> selectAll());
         clearButton.setOnClickListener(v -> clearSelection());
         refreshButton.setOnClickListener(v -> loadMedia());
-        shareButton.setOnClickListener(v -> shareSelected());
-        renameButton.setOnClickListener(v -> renameSelected());
-        deleteButton.setOnClickListener(v -> confirmDeleteSelected());
+        toolsButton.setOnClickListener(this::showToolsMenu);
         closeButton.setOnClickListener(v -> finish());
 
         if (hasLegacyReadPermission()) {
@@ -242,9 +247,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 items.size(),
                 selected.size()
         ));
-        shareButton.setEnabled(!selected.isEmpty());
-        deleteButton.setEnabled(!selected.isEmpty());
-        renameButton.setEnabled(selected.size() == 1);
+        toolsButton.setEnabled(!selected.isEmpty());
         clearButton.setEnabled(!selected.isEmpty());
         selectAllButton.setEnabled(!items.isEmpty() && selected.size() != items.size());
     }
@@ -257,6 +260,39 @@ public class ExplorerActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
+    private void showToolsMenu(View anchor) {
+        if (selected.isEmpty()) return;
+        PopupMenu popup = new PopupMenu(this, anchor);
+        popup.getMenu().add(0, MENU_SHARE, 0, "แชร์");
+        popup.getMenu().add(0, MENU_COPY, 1, "คัดลอก (Copy)");
+        popup.getMenu().add(0, MENU_MOVE, 2, "ย้าย (Move)");
+        popup.getMenu().add(0, MENU_RENAME, 3, "เปลี่ยนชื่อ");
+        popup.getMenu().add(0, MENU_DELETE, 4, "ลบ");
+        popup.getMenu().findItem(MENU_RENAME).setEnabled(selected.size() == 1);
+        popup.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case MENU_SHARE:
+                    shareSelected();
+                    return true;
+                case MENU_COPY:
+                    chooseDestination(false);
+                    return true;
+                case MENU_MOVE:
+                    chooseDestination(true);
+                    return true;
+                case MENU_RENAME:
+                    renameSelected();
+                    return true;
+                case MENU_DELETE:
+                    confirmDeleteSelected();
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        popup.show();
+    }
+
     private void shareSelected() {
         if (selected.isEmpty()) return;
         ArrayList<Uri> uris = new ArrayList<>(selected);
@@ -265,6 +301,282 @@ public class ExplorerActivity extends AppCompatActivity {
         intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(Intent.createChooser(intent, "แชร์ไฟล์ที่เลือก"));
+    }
+
+    private void chooseDestination(boolean move) {
+        if (selected.isEmpty()) return;
+        String current = folderStore.getCurrentFolder();
+        List<String> targets = new ArrayList<>();
+        for (String folder : folderStore.getKnownFolders()) {
+            if (!folder.equals(current)) targets.add(folder);
+        }
+
+        List<String> labels = new ArrayList<>();
+        for (String folder : targets) labels.add(FolderStore.displayName(folder));
+        labels.add("＋ สร้างโฟลเดอร์ใหม่...");
+
+        String title = move ? "ย้ายไปโฟลเดอร์" : "คัดลอกไปโฟลเดอร์";
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                    if (which == targets.size()) {
+                        promptNewDestination(move);
+                    } else {
+                        confirmTransfer(move, targets.get(which));
+                    }
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
+    private void promptNewDestination(boolean move) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("เช่น 20");
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("สร้างโฟลเดอร์ปลายทาง")
+                .setView(input)
+                .setPositiveButton("สร้าง", (d, which) -> {
+                    String folder = FolderStore.normalize(input.getText().toString());
+                    if (folder.isEmpty()) {
+                        Toast.makeText(this, "กรุณาใส่ชื่อโฟลเดอร์", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (folder.equals(folderStore.getCurrentFolder())) {
+                        Toast.makeText(this, "โฟลเดอร์นี้เป็นโฟลเดอร์ต้นทางอยู่แล้ว", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    folderStore.addFolder(folder);
+                    confirmTransfer(move, folder);
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFF1565C0);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFF555555);
+        });
+        dialog.show();
+    }
+
+    private void confirmTransfer(boolean move, String targetFolder) {
+        List<MediaItem> chosen = selectedItemsSnapshot();
+        if (chosen.isEmpty()) return;
+
+        String action = move ? "ย้าย" : "คัดลอก";
+        String source = FolderStore.displayName(folderStore.getCurrentFolder());
+        String target = FolderStore.displayName(targetFolder);
+        String message = action + " " + chosen.size() + " รายการ\n"
+                + "จาก: " + source + "\n"
+                + "ไป: " + target + "\n\n"
+                + "ถ้ามีชื่อไฟล์ซ้ำ ระบบจะสร้างชื่อใหม่อัตโนมัติและไม่เขียนทับไฟล์เดิม";
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(action + "ไฟล์")
+                .setMessage(message)
+                .setPositiveButton(action, (d, which) -> performTransfer(chosen, targetFolder, move))
+                .setNegativeButton("ยกเลิก", null)
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFF1565C0);
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFF555555);
+        });
+        dialog.show();
+    }
+
+    private List<MediaItem> selectedItemsSnapshot() {
+        List<MediaItem> chosen = new ArrayList<>();
+        for (MediaItem item : items) {
+            if (selected.contains(item.uri)) chosen.add(item);
+        }
+        return chosen;
+    }
+
+    private void performTransfer(List<MediaItem> chosen, String targetFolder, boolean move) {
+        String action = move ? "ย้าย" : "คัดลอก";
+        toolsButton.setEnabled(false);
+        countText.setText("กำลัง" + action + " " + chosen.size() + " รายการ...");
+        folderStore.addFolder(targetFolder);
+
+        new Thread(() -> {
+            int success = 0;
+            int failed = 0;
+            for (MediaItem item : chosen) {
+                boolean ok;
+                try {
+                    ok = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                            ? transferScoped(item, targetFolder, move)
+                            : transferLegacy(item, targetFolder, move);
+                } catch (Exception e) {
+                    ok = false;
+                }
+                if (ok) success++;
+                else failed++;
+            }
+
+            int finalSuccess = success;
+            int finalFailed = failed;
+            runOnUiThread(() -> {
+                String result = action + "สำเร็จ " + finalSuccess + " รายการ";
+                if (finalFailed > 0) result += " • ไม่สำเร็จ " + finalFailed + " รายการ";
+                Toast.makeText(this, result, Toast.LENGTH_LONG).show();
+                loadMedia();
+            });
+        }).start();
+    }
+
+    private boolean transferScoped(MediaItem item, String targetFolder, boolean move) throws Exception {
+        Uri collection = item.video
+                ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+        String relativePath = item.video
+                ? FolderStore.videoRelativePath(targetFolder)
+                : FolderStore.pictureRelativePath(targetFolder);
+        String targetName = uniqueDisplayName(collection, relativePath, item.name);
+
+        if (move) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, targetName);
+            return getContentResolver().update(item.uri, values, null, null) > 0;
+        }
+
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, targetName);
+        values.put(MediaStore.MediaColumns.MIME_TYPE, item.mimeType);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+        Uri destination = getContentResolver().insert(collection, values);
+        if (destination == null) return false;
+
+        boolean copied = false;
+        try (InputStream in = getContentResolver().openInputStream(item.uri);
+             OutputStream out = getContentResolver().openOutputStream(destination, "w")) {
+            if (in == null || out == null) return false;
+            copyStream(in, out);
+            copied = true;
+        } finally {
+            if (copied) {
+                ContentValues ready = new ContentValues();
+                ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(destination, ready, null, null);
+            } else {
+                try {
+                    getContentResolver().delete(destination, null, null);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return copied;
+    }
+
+    private String uniqueDisplayName(Uri collection, String relativePath, String originalName) {
+        if (!displayNameExists(collection, relativePath, originalName)) return originalName;
+        String base = stripExtension(originalName);
+        String extension = extensionOf(originalName);
+        for (int i = 1; i < 10000; i++) {
+            String candidate = base + " (" + i + ")" + extension;
+            if (!displayNameExists(collection, relativePath, candidate)) return candidate;
+        }
+        return base + " (copy-" + System.currentTimeMillis() + ")" + extension;
+    }
+
+    private boolean displayNameExists(Uri collection, String relativePath, String name) {
+        String selection = MediaStore.MediaColumns.RELATIVE_PATH + "=? AND "
+                + MediaStore.MediaColumns.DISPLAY_NAME + "=?";
+        try (Cursor cursor = getContentResolver().query(
+                collection,
+                new String[]{MediaStore.MediaColumns._ID},
+                selection,
+                new String[]{relativePath, name},
+                null
+        )) {
+            return cursor != null && cursor.moveToFirst();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean transferLegacy(MediaItem item, String targetFolder, boolean move) throws Exception {
+        String sourcePath = queryLegacyDataPath(item.uri);
+        if (sourcePath == null) return false;
+        File source = new File(sourcePath);
+        if (!source.isFile()) return false;
+
+        File destinationDir = item.video
+                ? FolderStore.legacyVideoDir(targetFolder)
+                : FolderStore.legacyPictureDir(targetFolder);
+        if (!destinationDir.exists() && !destinationDir.mkdirs()) return false;
+        File destination = uniqueLegacyFile(destinationDir, item.name);
+
+        if (move) {
+            boolean moved = source.renameTo(destination);
+            if (!moved) {
+                copyFile(source, destination);
+                moved = source.delete();
+            }
+            if (!moved) return false;
+            try {
+                getContentResolver().delete(item.uri, null, null);
+            } catch (Exception ignored) {
+            }
+        } else {
+            copyFile(source, destination);
+        }
+
+        MediaScannerConnection.scanFile(
+                this,
+                new String[]{destination.getAbsolutePath()},
+                new String[]{item.mimeType},
+                null
+        );
+        return true;
+    }
+
+    private String queryLegacyDataPath(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(
+                uri,
+                new String[]{MediaStore.MediaColumns.DATA},
+                null,
+                null,
+                null
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(MediaStore.MediaColumns.DATA);
+                if (index >= 0) return cursor.getString(index);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private File uniqueLegacyFile(File dir, String originalName) {
+        File direct = new File(dir, originalName);
+        if (!direct.exists()) return direct;
+        String base = stripExtension(originalName);
+        String extension = extensionOf(originalName);
+        for (int i = 1; i < 10000; i++) {
+            File candidate = new File(dir, base + " (" + i + ")" + extension);
+            if (!candidate.exists()) return candidate;
+        }
+        return new File(dir, base + " (copy-" + System.currentTimeMillis() + ")" + extension);
+    }
+
+    private void copyFile(File source, File destination) throws Exception {
+        try (InputStream in = new FileInputStream(source);
+             OutputStream out = new FileOutputStream(destination)) {
+            copyStream(in, out);
+        }
+    }
+
+    private void copyStream(InputStream in, OutputStream out) throws Exception {
+        byte[] buffer = new byte[256 * 1024];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        out.flush();
     }
 
     private void renameSelected() {
