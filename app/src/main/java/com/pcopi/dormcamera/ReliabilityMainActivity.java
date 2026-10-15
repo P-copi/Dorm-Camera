@@ -116,7 +116,7 @@ public final class ReliabilityMainActivity extends MainActivity {
 
         PressFeedbackButton tools = new PressFeedbackButton(this);
         tools.setText("เครื่องมือ");
-        tools.setTextAllCaps(false);
+        tools.setAllCaps(false);
         tools.setTextColor(0xFFFFFFFF);
         tools.setTextSize(11f);
         tools.setMinWidth(0);
