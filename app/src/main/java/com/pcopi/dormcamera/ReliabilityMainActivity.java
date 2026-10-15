@@ -1,21 +1,23 @@
 package com.pcopi.dormcamera;
 
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.media.MediaActionSound;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Chronometer;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import java.lang.reflect.Field;
 
 /**
  * Reliability wrapper around the proven camera activity.
- * V0.1.27 keeps normal Android hardware-volume behavior and routes the app shutter click
- * through STREAM_MUSIC with a perceptual gain curve, so slider levels are audibly distinct.
+ * V0.2.0 keeps every proven camera behavior and adds only a separate personal-tools entry point.
  */
 public final class ReliabilityMainActivity extends MainActivity {
     private static final String PREF_VOLUME_HELP_127 = "volume_help_0127_shown";
@@ -43,6 +45,7 @@ public final class ReliabilityMainActivity extends MainActivity {
             });
         }
         installVariableShutterHook();
+        installToolsOverlay();
         showOneTimeVolumeHelp();
     }
 
@@ -105,6 +108,30 @@ public final class ReliabilityMainActivity extends MainActivity {
         int index = row.indexOfChild(grid);
         row.addView(volumeButton, Math.max(0, index), params);
         return volumeButton;
+    }
+
+    private void installToolsOverlay() {
+        View container = findViewById(R.id.previewContainer);
+        if (!(container instanceof FrameLayout)) return;
+
+        PressFeedbackButton tools = new PressFeedbackButton(this);
+        tools.setText("เครื่องมือ");
+        tools.setTextAllCaps(false);
+        tools.setTextColor(0xFFFFFFFF);
+        tools.setTextSize(11f);
+        tools.setMinWidth(0);
+        tools.setMinHeight(0);
+        tools.setPadding(dp(8), 0, dp(8), 0);
+        tools.setBackgroundResource(R.drawable.bg_button_dark);
+        tools.setBackgroundTintList(null);
+        tools.setStateListAnimator(null);
+        tools.setContentDescription("เปิดเมนูเครื่องมือส่วนตัว");
+        tools.setOnClickListener(v -> startActivity(new Intent(this, ToolsActivity.class)));
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                dp(82), dp(36), Gravity.TOP | Gravity.END);
+        params.setMargins(0, dp(10), dp(10), 0);
+        ((FrameLayout) container).addView(tools, params);
     }
 
     private void showOneTimeVolumeHelp() {
