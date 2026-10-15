@@ -34,7 +34,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** V0.2.2 fixed Photo Navigator. */
+/** V0.2.3 fixed GPS source chooser for Samsung/Android dialogs. */
 public final class PhotoNavigatorFixedActivity extends AppCompatActivity {
     private static final int REQ_PICK_IMAGE = 2220;
     private static final int REQ_LOCATION_PERMISSION = 2221;
@@ -85,7 +85,7 @@ public final class PhotoNavigatorFixedActivity extends AppCompatActivity {
         root.addView(top);
 
         TextView safe = new TextView(this);
-        safe.setText("V0.2.2 • ต้นฉบับไม่ถูกแก้ไข • GPS บันทึกลงสำเนาใหม่");
+        safe.setText("V0.2.3 • ต้นฉบับไม่ถูกแก้ไข • GPS บันทึกลงสำเนาใหม่");
         safe.setTextColor(0xFF8FC9A3);
         safe.setTextSize(12f);
         safe.setGravity(Gravity.CENTER);
@@ -225,8 +225,9 @@ public final class PhotoNavigatorFixedActivity extends AppCompatActivity {
                 "✍️ ป้อน Latitude / Longitude"
         };
         new AlertDialog.Builder(this)
-                .setTitle(hasGps ? "แก้ไข GPS ให้สำเนา" : "เพิ่ม GPS ให้สำเนา")
-                .setMessage("ไฟล์ต้นฉบับจะไม่ถูกแก้ไข")
+                .setTitle(hasGps
+                        ? "แก้ไข GPS ให้สำเนา • เลือกวิธี"
+                        : "เพิ่ม GPS ให้สำเนา • เลือกวิธี")
                 .setItems(options, (d, which) -> {
                     if (which == 0) chooseCurrentLocation();
                     else if (which == 1) showPlaceSearchDialog();
@@ -435,7 +436,7 @@ public final class PhotoNavigatorFixedActivity extends AppCompatActivity {
                 Toast.makeText(this, "สร้างสำเนาพร้อม GPS สำเร็จ", Toast.LENGTH_LONG).show();
                 readImage(finalCopy);
             });
-        }, "gps-copy-v022").start();
+        }, "gps-copy-v023").start();
     }
 
     private void openMap() {
