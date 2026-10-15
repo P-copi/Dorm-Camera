@@ -66,7 +66,7 @@ public final class ToolsActivity extends AppCompatActivity {
     private PressFeedbackButton makeButton(String text) {
         PressFeedbackButton button = new PressFeedbackButton(this);
         button.setText(text);
-        button.setTextAllCaps(false);
+        button.setAllCaps(false);
         button.setTextColor(0xFFFFFFFF);
         button.setTextSize(16f);
         button.setGravity(Gravity.CENTER_VERTICAL);
