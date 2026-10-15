@@ -1,18 +1,18 @@
 package com.pcopi.dormcamera;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.widget.Button;
 import android.widget.Chronometer;
-import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import java.util.Locale;
@@ -20,12 +20,14 @@ import java.util.Locale;
 /**
  * Reliability wrapper around the proven camera activity.
  * Short volume press keeps normal media-volume control, while a long press captures one photo.
- * V0.1.24 adds a compact on-screen indicator so the short/long gesture is obvious.
- * Video recording still finalizes safely when the app loses focus.
+ * V0.1.25 moves the gesture feedback to the always-visible camera status chip so Samsung/CameraX
+ * preview composition cannot hide it.
  */
 public final class ReliabilityMainActivity extends MainActivity {
     private static final long LONG_PRESS_MS = ViewConfiguration.getLongPressTimeout();
     private static final long PROGRESS_TICK_MS = 80L;
+    private static final long SHORT_STATUS_MS = 950L;
+    private static final String PREF_VOLUME_HELP_125 = "volume_help_0125_shown";
 
     private final Handler volumeHandler = new Handler(Looper.getMainLooper());
     private boolean stoppedRecordingForInterruption;
@@ -35,36 +37,26 @@ public final class ReliabilityMainActivity extends MainActivity {
     private int lastProgressStep = -1;
     private Runnable volumeLongPressRunnable;
     private Runnable volumeProgressRunnable;
-    private Runnable volumeHintHideRunnable;
-    private TextView volumeGestureHint;
+    private Runnable statusRestoreRunnable;
+    private String statusBeforeGesture;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        installVolumeGestureHint();
+        showOneTimeVolumeHelp();
     }
 
-    private void installVolumeGestureHint() {
-        FrameLayout previewContainer = findViewById(R.id.previewContainer);
-        if (previewContainer == null) return;
-
-        volumeGestureHint = new TextView(this);
-        volumeGestureHint.setGravity(Gravity.CENTER);
-        volumeGestureHint.setTextColor(0xFFF7F7FA);
-        volumeGestureHint.setTextSize(12f);
-        volumeGestureHint.setSingleLine(true);
-        volumeGestureHint.setPadding(dp(14), 0, dp(14), 0);
-        volumeGestureHint.setBackgroundResource(R.drawable.bg_info_chip);
-        volumeGestureHint.setElevation(dp(8));
-        volumeGestureHint.setVisibility(View.GONE);
-
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                dp(38),
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL
-        );
-        params.topMargin = dp(48);
-        previewContainer.addView(volumeGestureHint, params);
+    private void showOneTimeVolumeHelp() {
+        SharedPreferences prefs = getSharedPreferences("camera_settings", MODE_PRIVATE);
+        if (prefs.getBoolean(PREF_VOLUME_HELP_125, false)) return;
+        prefs.edit().putBoolean(PREF_VOLUME_HELP_125, true).apply();
+        View root = findViewById(android.R.id.content);
+        if (root != null) {
+            root.postDelayed(() -> UiNotice.show(
+                    this,
+                    "V0.1.25 • แตะ Volume = ปรับเสียง • ค้าง = ถ่ายภาพ"
+            ), 650L);
+        }
     }
 
     @Override
@@ -76,8 +68,7 @@ public final class ReliabilityMainActivity extends MainActivity {
         Chronometer timer = findViewById(R.id.recordingTimer);
         boolean recording = timer != null && timer.getVisibility() == View.VISIBLE;
         if (recording) {
-            // While recording, never trigger a photo. Keep normal Android volume behaviour.
-            hideVolumeHintNow();
+            resetVolumeGesture(false);
             return super.dispatchKeyEvent(event);
         }
 
@@ -95,19 +86,23 @@ public final class ReliabilityMainActivity extends MainActivity {
     }
 
     private void beginVolumeGesture(int keyCode) {
-        cancelVolumeGestureCallbacks();
+        cancelGestureCallbacks();
+        cancelStatusRestore();
         activeVolumeKey = keyCode;
         volumeLongPressTriggered = false;
         volumeGestureStartedAt = SystemClock.uptimeMillis();
         lastProgressStep = -1;
 
+        TextView status = findViewById(R.id.statusText);
+        statusBeforeGesture = status == null ? null : String.valueOf(status.getText());
         updateHoldProgress(0);
+
         volumeProgressRunnable = new Runnable() {
             @Override
             public void run() {
                 if (activeVolumeKey != keyCode || volumeLongPressTriggered) return;
                 long elapsed = Math.max(0L, SystemClock.uptimeMillis() - volumeGestureStartedAt);
-                int step = (int) Math.min(4L, (elapsed * 5L) / Math.max(1L, LONG_PRESS_MS));
+                int step = (int) Math.min(3L, (elapsed * 4L) / Math.max(1L, LONG_PRESS_MS));
                 updateHoldProgress(step);
                 volumeHandler.postDelayed(this, PROGRESS_TICK_MS);
             }
@@ -118,13 +113,14 @@ public final class ReliabilityMainActivity extends MainActivity {
             if (activeVolumeKey != keyCode || volumeLongPressTriggered) return;
             Button shutter = findViewById(R.id.captureButton);
             if (shutter == null || !shutter.isEnabled()) {
-                showTemporaryHint("กล้องยังไม่พร้อม", 650L);
+                showStatusTemporarily("กล้องยังไม่พร้อม", 700L);
                 return;
             }
 
             volumeLongPressTriggered = true;
             cancelProgressCallback();
-            showTemporaryHint("✓  ถ่ายแล้ว", 650L);
+            showStatus("ค้างเพื่อถ่าย  ■■■■■  100%");
+            shutter.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
 
             shutter.animate().cancel();
             shutter.animate()
@@ -137,6 +133,8 @@ public final class ReliabilityMainActivity extends MainActivity {
                             .setDuration(90L)
                             .start())
                     .start();
+
+            // MainActivity immediately replaces the status with its normal capture/saved messages.
             shutter.performClick();
         };
 
@@ -144,19 +142,18 @@ public final class ReliabilityMainActivity extends MainActivity {
     }
 
     private void updateHoldProgress(int step) {
-        if (volumeGestureHint == null || step == lastProgressStep) return;
+        if (step == lastProgressStep) return;
         lastProgressStep = step;
-
-        int filled = Math.max(0, Math.min(5, step + 1));
-        int percent = Math.min(80, Math.max(20, filled * 20));
+        int filled = Math.max(1, Math.min(4, step + 1));
+        int percent = filled * 20;
         StringBuilder bar = new StringBuilder();
         for (int i = 0; i < 5; i++) bar.append(i < filled ? '■' : '□');
-        showPersistentHint("ค้างเพื่อถ่าย  " + bar + "  " + percent + "%");
+        showStatus("ค้างเพื่อถ่าย  " + bar + "  " + percent + "%");
     }
 
     private void finishVolumeGesture(int keyCode) {
         if (activeVolumeKey != keyCode) return;
-        cancelVolumeGestureCallbacks();
+        cancelGestureCallbacks();
 
         if (!volumeLongPressTriggered) {
             adjustSystemVolume(keyCode);
@@ -169,7 +166,10 @@ public final class ReliabilityMainActivity extends MainActivity {
 
     private void adjustSystemVolume(int keyCode) {
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager == null) return;
+        if (audioManager == null) {
+            restoreStatusSoon();
+            return;
+        }
 
         int direction = keyCode == KeyEvent.KEYCODE_VOLUME_UP
                 ? AudioManager.ADJUST_RAISE
@@ -183,58 +183,45 @@ public final class ReliabilityMainActivity extends MainActivity {
         int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
         int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
         String symbol = keyCode == KeyEvent.KEYCODE_VOLUME_UP ? "+" : "−";
-        showTemporaryHint(
-                String.format(Locale.US, "เสียง %s   ระดับ %d/%d", symbol, current, max),
-                850L
-        );
+        showStatus(String.format(Locale.US, "🔊  เสียง %s   ระดับ %d/%d", symbol, current, max));
+        restoreStatusSoon();
     }
 
-    private void showPersistentHint(String text) {
-        if (volumeGestureHint == null) return;
-        if (volumeHintHideRunnable != null) {
-            volumeHandler.removeCallbacks(volumeHintHideRunnable);
-            volumeHintHideRunnable = null;
-        }
-        volumeGestureHint.animate().cancel();
-        volumeGestureHint.setText(text);
-        if (volumeGestureHint.getVisibility() != View.VISIBLE) {
-            volumeGestureHint.setAlpha(0f);
-            volumeGestureHint.setScaleX(0.97f);
-            volumeGestureHint.setScaleY(0.97f);
-            volumeGestureHint.setVisibility(View.VISIBLE);
-            volumeGestureHint.animate()
-                    .alpha(1f)
-                    .scaleX(1f)
-                    .scaleY(1f)
-                    .setDuration(100L)
-                    .start();
-        }
+    private void showStatus(String text) {
+        TextView status = findViewById(R.id.statusText);
+        if (status == null) return;
+        status.animate().cancel();
+        status.setAlpha(1f);
+        status.setText(text);
     }
 
-    private void showTemporaryHint(String text, long durationMs) {
-        showPersistentHint(text);
-        if (volumeGestureHint == null) return;
-        volumeHintHideRunnable = () -> {
-            if (volumeGestureHint == null) return;
-            volumeGestureHint.animate().cancel();
-            volumeGestureHint.animate()
-                    .alpha(0f)
-                    .setDuration(180L)
-                    .withEndAction(() -> volumeGestureHint.setVisibility(View.GONE))
-                    .start();
-        };
-        volumeHandler.postDelayed(volumeHintHideRunnable, durationMs);
+    private void showStatusTemporarily(String text, long durationMs) {
+        showStatus(text);
+        cancelStatusRestore();
+        statusRestoreRunnable = this::restoreStatus;
+        volumeHandler.postDelayed(statusRestoreRunnable, durationMs);
     }
 
-    private void hideVolumeHintNow() {
-        if (volumeGestureHint == null) return;
-        if (volumeHintHideRunnable != null) {
-            volumeHandler.removeCallbacks(volumeHintHideRunnable);
-            volumeHintHideRunnable = null;
+    private void restoreStatusSoon() {
+        cancelStatusRestore();
+        statusRestoreRunnable = this::restoreStatus;
+        volumeHandler.postDelayed(statusRestoreRunnable, SHORT_STATUS_MS);
+    }
+
+    private void restoreStatus() {
+        statusRestoreRunnable = null;
+        TextView status = findViewById(R.id.statusText);
+        if (status != null && statusBeforeGesture != null && !statusBeforeGesture.isEmpty()) {
+            status.setText(statusBeforeGesture);
         }
-        volumeGestureHint.animate().cancel();
-        volumeGestureHint.setVisibility(View.GONE);
-        volumeGestureHint.setAlpha(1f);
+        statusBeforeGesture = null;
+    }
+
+    private void cancelStatusRestore() {
+        if (statusRestoreRunnable != null) {
+            volumeHandler.removeCallbacks(statusRestoreRunnable);
+            statusRestoreRunnable = null;
+        }
     }
 
     private void cancelProgressCallback() {
@@ -244,7 +231,7 @@ public final class ReliabilityMainActivity extends MainActivity {
         }
     }
 
-    private void cancelVolumeGestureCallbacks() {
+    private void cancelGestureCallbacks() {
         if (volumeLongPressRunnable != null) {
             volumeHandler.removeCallbacks(volumeLongPressRunnable);
             volumeLongPressRunnable = null;
@@ -252,21 +239,19 @@ public final class ReliabilityMainActivity extends MainActivity {
         cancelProgressCallback();
     }
 
-    private void resetVolumeGesture() {
-        cancelVolumeGestureCallbacks();
+    private void resetVolumeGesture(boolean restoreStatus) {
+        cancelGestureCallbacks();
+        cancelStatusRestore();
         activeVolumeKey = KeyEvent.KEYCODE_UNKNOWN;
         volumeLongPressTriggered = false;
         lastProgressStep = -1;
-        hideVolumeHintNow();
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+        if (restoreStatus) restoreStatus();
+        else statusBeforeGesture = null;
     }
 
     @Override
     protected void onPause() {
-        resetVolumeGesture();
+        resetVolumeGesture(false);
 
         Chronometer timer = findViewById(R.id.recordingTimer);
         Button video = findViewById(R.id.videoButton);
@@ -293,7 +278,7 @@ public final class ReliabilityMainActivity extends MainActivity {
 
     @Override
     protected void onDestroy() {
-        resetVolumeGesture();
+        resetVolumeGesture(false);
         volumeHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
