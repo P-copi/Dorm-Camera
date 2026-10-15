@@ -63,6 +63,12 @@
             app:implementationMode="performance"
             app:scaleType="fillCenter" />
 
+        <com.pcopi.dormcamera.GridOverlayView
+            android:id="@+id/gridOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
         <View
             android:id="@+id/focusIndicator"
             android:layout_width="72dp"
@@ -86,6 +92,27 @@
             android:elevation="5dp"
             android:visibility="gone"
             android:background="@drawable/bg_recording_badge" />
+
+        <TextView
+            android:id="@+id/warningBanner"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="104dp"
+            android:gravity="center"
+            android:maxWidth="330dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:text="พื้นที่จัดเก็บเหลือน้อย"
+            android:textColor="#FFF1D2"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:elevation="8dp"
+            android:visibility="gone"
+            android:background="@drawable/bg_warning_banner" />
 
         <TextView
             android:id="@+id/saveBanner"
@@ -288,6 +315,23 @@
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
+
+            <com.pcopi.dormcamera.GridToggleButton
+                android:id="@+id/gridButton"
+                android:layout_width="48dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="▦"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:contentDescription="เปิดเส้นกริด"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
         </LinearLayout>
 
         <LinearLayout
@@ -316,7 +360,7 @@
 
             <Space android:layout_width="28dp" android:layout_height="1dp" />
 
-            <com.pcopi.dormcamera.PressFeedbackButton
+            <com.pcopi.dormcamera.SafeCaptureButton
                 android:id="@+id/captureButton"
                 android:layout_width="88dp"
                 android:layout_height="88dp"
