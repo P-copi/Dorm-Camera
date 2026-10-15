@@ -45,7 +45,7 @@ public final class BrandSplashActivity extends AppCompatActivity {
     private void openCamera() {
         if (launched || isFinishing()) return;
         launched = true;
-        startActivity(new Intent(this, MainActivity.class));
+        startActivity(new Intent(this, ReliabilityMainActivity.class));
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
         finish();
     }
