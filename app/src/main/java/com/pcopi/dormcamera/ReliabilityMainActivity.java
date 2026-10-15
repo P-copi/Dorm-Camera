@@ -2,32 +2,92 @@ package com.pcopi.dormcamera;
 
 import android.content.SharedPreferences;
 import android.media.AudioManager;
+import android.media.MediaActionSound;
 import android.os.Bundle;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Chronometer;
 import android.widget.LinearLayout;
 
+import java.lang.reflect.Field;
+
 /**
  * Reliability wrapper around the proven camera activity.
- * V0.1.26 restores normal Android hardware-volume behavior and adds an explicit
- * toolbar volume slider, while preserving safe video finalization on interruption.
+ * V0.1.27 keeps normal Android hardware-volume behavior and routes the app shutter click
+ * through STREAM_MUSIC with a perceptual gain curve, so slider levels are audibly distinct.
  */
 public final class ReliabilityMainActivity extends MainActivity {
-    private static final String PREF_VOLUME_HELP_126 = "volume_help_0126_shown";
+    private static final String PREF_VOLUME_HELP_127 = "volume_help_0127_shown";
+    private static final String PREF_SHUTTER_SOUND = "shutter_sound_enabled";
+
     private boolean stoppedRecordingForInterruption;
+    private ShutterClickPlayer shutterClickPlayer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
-        installSystemVolumeButton();
+
+        // Keep MainActivity's existing on/off preference and button UI, but replace only
+        // its fixed-volume MediaActionSound engine with our variable-volume click.
+        detachBuiltInShutterSound();
+        shutterClickPlayer = new ShutterClickPlayer(this);
+
+        SystemVolumeButton volumeButton = installSystemVolumeButton();
+        if (volumeButton != null) {
+            volumeButton.setPreviewSound(() -> {
+                if (isShutterSoundEnabled() && shutterClickPlayer != null) {
+                    shutterClickPlayer.playCurrentLevel();
+                }
+            });
+        }
+        installVariableShutterHook();
         showOneTimeVolumeHelp();
     }
 
-    private void installSystemVolumeButton() {
+    private void detachBuiltInShutterSound() {
+        try {
+            Field field = MainActivity.class.getDeclaredField("shutterSound");
+            field.setAccessible(true);
+            Object current = field.get(this);
+            if (current instanceof MediaActionSound) {
+                try {
+                    ((MediaActionSound) current).release();
+                } catch (Exception ignored) {
+                }
+            }
+            field.set(this, null);
+        } catch (Exception ignored) {
+            // If a future refactor renames the field, camera capture still works;
+            // the build remains safe and only the variable-volume replacement is skipped.
+        }
+    }
+
+    private boolean isShutterSoundEnabled() {
+        SharedPreferences prefs = getSharedPreferences("camera_settings", MODE_PRIVATE);
+        return prefs.getBoolean(PREF_SHUTTER_SOUND, true);
+    }
+
+    private void installVariableShutterHook() {
+        Button capture = findViewById(R.id.captureButton);
+        if (capture == null) return;
+
+        capture.setOnTouchListener((v, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_UP
+                    && v.isEnabled()
+                    && isShutterSoundEnabled()
+                    && shutterClickPlayer != null) {
+                shutterClickPlayer.playCurrentLevel();
+            }
+            // Returning false preserves the proven SafeCaptureButton click/storage behavior.
+            return false;
+        });
+    }
+
+    private SystemVolumeButton installSystemVolumeButton() {
         View grid = findViewById(R.id.gridButton);
-        if (grid == null || !(grid.getParent() instanceof LinearLayout)) return;
+        if (grid == null || !(grid.getParent() instanceof LinearLayout)) return null;
 
         LinearLayout row = (LinearLayout) grid.getParent();
         SystemVolumeButton volumeButton = new SystemVolumeButton(this);
@@ -44,17 +104,18 @@ public final class ReliabilityMainActivity extends MainActivity {
         params.setMarginStart(dp(6));
         int index = row.indexOfChild(grid);
         row.addView(volumeButton, Math.max(0, index), params);
+        return volumeButton;
     }
 
     private void showOneTimeVolumeHelp() {
         SharedPreferences prefs = getSharedPreferences("camera_settings", MODE_PRIVATE);
-        if (prefs.getBoolean(PREF_VOLUME_HELP_126, false)) return;
-        prefs.edit().putBoolean(PREF_VOLUME_HELP_126, true).apply();
+        if (prefs.getBoolean(PREF_VOLUME_HELP_127, false)) return;
+        prefs.edit().putBoolean(PREF_VOLUME_HELP_127, true).apply();
         View root = findViewById(android.R.id.content);
         if (root != null) {
             root.postDelayed(() -> UiNotice.show(
                     this,
-                    "V0.1.26 • ปุ่มข้างเครื่องปรับเสียงตามปกติ • แตะ 🔉 เพื่อดูระดับเสียง"
+                    "V0.1.27 • เลื่อนระดับแล้วปล่อย เพื่อฟังเสียงชัตเตอร์ทดสอบ"
             ), 650L);
         }
     }
@@ -86,5 +147,14 @@ public final class ReliabilityMainActivity extends MainActivity {
                         "วิดีโอถูกหยุดและบันทึกอย่างปลอดภัยหลังแอปถูกขัดจังหวะ"), 300L);
             }
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (shutterClickPlayer != null) {
+            shutterClickPlayer.release();
+            shutterClickPlayer = null;
+        }
+        super.onDestroy();
     }
 }
