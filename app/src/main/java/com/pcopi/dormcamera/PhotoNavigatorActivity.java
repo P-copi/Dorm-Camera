@@ -7,7 +7,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
 import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -306,7 +305,7 @@ public final class PhotoNavigatorActivity extends AppCompatActivity {
     private PressFeedbackButton makeButton(String text, float size) {
         PressFeedbackButton button = new PressFeedbackButton(this);
         button.setText(text);
-        button.setTextAllCaps(false);
+        button.setAllCaps(false);
         button.setTextColor(0xFFFFFFFF);
         button.setTextSize(size);
         button.setGravity(Gravity.CENTER);
