@@ -37,4 +37,11 @@ public final class VideoControlButton extends PressFeedbackButton {
         }
         refreshDrawableState();
     }
+
+    @Override
+    public boolean performClick() {
+        // Activated means recording is already in progress, so a click must always be allowed to stop it.
+        if (!isActivated() && !StorageGuard.checkBeforeVideo(getContext())) return false;
+        return super.performClick();
+    }
 }
