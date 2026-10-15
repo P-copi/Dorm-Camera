@@ -42,13 +42,13 @@ public final class ToolsActivity extends AppCompatActivity {
 
         PressFeedbackButton navigator = makeButton("🧭  นำทาง / GPS จากภาพ");
         navigator.setContentDescription("เลือกภาพ อ่านหรือเพิ่ม GPS แล้วเปิดแผนที่หรือนำทาง");
-        navigator.setOnClickListener(v -> startActivity(new Intent(this, PhotoNavigatorActivity.class)));
+        navigator.setOnClickListener(v -> startActivity(new Intent(this, PhotoNavigatorFixedActivity.class)));
         root.addView(navigator, buttonParams());
 
         TextView detail = new TextView(this);
         detail.setText("• ภาพมี GPS: เปิดแผนที่หรือนำทางได้ทันที\n"
                 + "• ภาพไม่มี GPS: ใช้ตำแหน่งปัจจุบัน ค้นหาชื่อสถานที่ หรือป้อนพิกัดเอง\n"
-                + "• การเพิ่ม GPS จะสร้างสำเนาใหม่ ไม่แก้ไฟล์ต้นฉบับ");
+                + "• V0.2.2 สร้างสำเนาในไฟล์ชั่วคราวและตรวจ GPS ก่อนบันทึกเข้าคลังภาพ");
         detail.setTextColor(0xFFB9BBC2);
         detail.setTextSize(13f);
         detail.setLineSpacing(0f, 1.2f);
@@ -57,7 +57,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView note = new TextView(this);
-        note.setText("V0.2.1 • สำเนาที่เพิ่ม GPS จะบันทึกใน Pictures/DormCamera");
+        note.setText("V0.2.2 • สำเนาที่เพิ่ม GPS จะบันทึกใน Pictures/DormCamera");
         note.setTextColor(0xFF8F929A);
         note.setTextSize(12f);
         note.setPadding(dp(4), dp(6), dp(4), 0);
