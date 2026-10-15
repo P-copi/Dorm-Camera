@@ -47,8 +47,8 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/badging.txt
-          grep -q "versionCode='29'" /tmp/badging.txt
-          grep -q "versionName='0.1.28'" /tmp/badging.txt
+          grep -q "versionCode='30'" /tmp/badging.txt
+          grep -q "versionName='0.2.0'" /tmp/badging.txt
           grep -q "launchable-activity: name='com.pcopi.dormcamera.BrandSplashActivity'" /tmp/badging.txt
           grep -q "application-icon-" /tmp/badging.txt
           grep -q "icon='res/drawable/dorm_camera_logo.xml'" /tmp/badging.txt
@@ -80,15 +80,15 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/signature.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/release-badging.txt
           grep -q "package: name='com.pcopi.dormcamera'" /tmp/release-badging.txt
-          grep -q "versionCode='29'" /tmp/release-badging.txt
-          grep -q "versionName='0.1.28'" /tmp/release-badging.txt
+          grep -q "versionCode='30'" /tmp/release-badging.txt
+          grep -q "versionName='0.2.0'" /tmp/release-badging.txt
           grep -q "launchable-activity: name='com.pcopi.dormcamera.BrandSplashActivity'" /tmp/release-badging.txt
           grep -q "application-icon-" /tmp/release-badging.txt
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dorm-Camera-V0.1.28-Natural-Shutter-Sound-Permanent-Signed
+          name: Dorm-Camera-V0.2.0-Photo-Navigator-Permanent-Signed
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 7
