@@ -38,12 +38,12 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         PressFeedbackButton myPlaces = makeButton("📍  สถานที่ของฉัน");
-        myPlaces.setContentDescription("ค้นหาภาพที่มี GPS รายการโปรด นำทาง และแชร์สถานที่");
-        myPlaces.setOnClickListener(v -> startActivity(new Intent(this, MyPlacesActivity.class)));
+        myPlaces.setContentDescription("ค้นหา รายการโปรด Smart Share และนำทางจากภาพ");
+        myPlaces.setOnClickListener(v -> startActivity(new Intent(this, MyPlacesV028Activity.class)));
         root.addView(myPlaces, buttonParams());
 
         TextView placeDetail = new TextView(this);
-        placeDetail.setText("ค้นหาจากชื่อภาพ • ⭐ รายการโปรด • เปิดแผนที่ • นำทาง • แชร์ภาพพร้อมลิงก์แผนที่");
+        placeDetail.setText("ค้นหาจากชื่อภาพ • ⭐ รายการโปรด • Smart Share 3 แบบ • รับภาพ/พิกัดจาก LINE ได้");
         placeDetail.setTextColor(0xFF8FC9A3);
         placeDetail.setTextSize(12f);
         placeDetail.setPadding(dp(8), 0, dp(8), dp(14));
@@ -68,7 +68,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView note = new TextView(this);
-        note.setText("V0.2.5 • สถานที่ของฉันอ่านจาก Pictures/DormCamera โดยตรง");
+        note.setText("V0.2.8 • LINE → แชร์ → Dorm Camera → ตรวจ GPS / นำทางได้ทันที");
         note.setTextColor(0xFF8F929A);
         note.setTextSize(12f);
         note.setPadding(dp(4), dp(6), dp(4), 0);
