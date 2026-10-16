@@ -42,7 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** V0.2.8 My Places with three-choice Smart Share queue. */
+/** V0.2.9 My Places with prepared no-GPS image and LINE-safe queue order. */
 public final class MyPlacesV028Activity extends AppCompatActivity {
     private static final String PREFS = "my_places_v025";
     private static final String KEY_FAVORITES = "favorite_uris";
@@ -64,6 +64,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     private boolean waitingForShareReturn;
     private int shareQueueIndex;
     @Nullable private PlaceItem queuedShareItem;
+    @Nullable private Uri preparedVisibleNoGpsUri;
     private SharedPreferences prefs;
 
     @Override
@@ -81,7 +82,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         super.onResume();
         if (waitingForShareReturn) {
             waitingForShareReturn = false;
-            handler.postDelayed(this::launchNextQueuedShare, 450L);
+            handler.postDelayed(this::launchNextQueuedShare, 500L);
             return;
         }
         if (firstResume) {
@@ -113,7 +114,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.8 • ค้นหา • ⭐ โปรด • Smart Share 3 แบบ");
+        subtitle.setText("V0.2.9 • ค้นหา • ⭐ โปรด • Smart Share 3 แบบ");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
@@ -239,7 +240,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 cleanupFavorites();
                 renderPlaces();
             });
-        }, "my-places-v028-loader").start();
+        }, "my-places-v029-loader").start();
     }
 
     private void renderPlaces() {
@@ -342,7 +343,8 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
 
         TextView note = new TextView(this);
         note.setText("เลือกได้หลายรายการ แล้วกด “เริ่มแชร์” ครั้งเดียว\n"
-                + "เมื่อกลับจาก LINE แอปจะเปิดรายการถัดไปให้อัตโนมัติ");
+                + "ภาพไม่มี GPS จะเตรียมให้เสร็จก่อนเริ่มแชร์\n"
+                + "ไฟล์ต้นฉบับพร้อม GPS จะส่งเป็นรายการสุดท้าย");
         note.setTextColor(0xFFB9BBC2);
         note.setTextSize(14f);
         note.setLineSpacing(0f, 1.15f);
@@ -357,7 +359,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(visible, checkParams());
 
         TextView privacy = new TextView(this);
-        privacy.setText("หมายเหตุ: ตำแหน่ง GPS เป็นข้อมูลตำแหน่งจริง • LINE ยังต้องให้เลือกผู้รับ/ยืนยันการส่งทีละรายการ");
+        privacy.setText("หมายเหตุ: LINE ยังต้องให้เลือกผู้รับ/ยืนยันการส่งทีละรายการ");
         privacy.setTextColor(0xFF8F929A);
         privacy.setTextSize(11f);
         privacy.setPadding(0, dp(8), 0, 0);
@@ -370,20 +372,59 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 .setNegativeButton("ยกเลิก", null)
                 .create();
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            if (!location.isChecked() && !original.isChecked() && !visible.isChecked()) {
+            boolean useLocation = location.isChecked();
+            boolean useOriginal = original.isChecked();
+            boolean useVisible = visible.isChecked();
+            if (!useLocation && !useOriginal && !useVisible) {
                 Toast.makeText(this, "กรุณาเลือกอย่างน้อย 1 รายการ", Toast.LENGTH_SHORT).show();
                 return;
             }
-            shareQueue.clear();
-            if (location.isChecked()) shareQueue.add(SHARE_LOCATION);
-            if (original.isChecked()) shareQueue.add(SHARE_ORIGINAL_FILE);
-            if (visible.isChecked()) shareQueue.add(SHARE_VISIBLE_NO_GPS);
-            queuedShareItem = item;
-            shareQueueIndex = 0;
-            dialog.dismiss();
-            launchNextQueuedShare();
+
+            if (!useVisible) {
+                preparedVisibleNoGpsUri = null;
+                dialog.dismiss();
+                beginShareQueue(item, useLocation, useVisible, useOriginal);
+                return;
+            }
+
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("กำลังเตรียมภาพ...");
+            new Thread(() -> {
+                Uri cleanUri = null;
+                String error = null;
+                try {
+                    cleanUri = ShareImageSanitizer.createGpsFreeShareUri(this, item.uri, item.name);
+                } catch (Exception e) {
+                    error = messageOf(e);
+                }
+                Uri finalCleanUri = cleanUri;
+                String finalError = error;
+                runOnUiThread(() -> {
+                    if (finalCleanUri == null) {
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("เริ่มแชร์");
+                        Toast.makeText(this,
+                                finalError == null ? "เตรียมภาพแบบไม่มี GPS ไม่สำเร็จ" : finalError,
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    preparedVisibleNoGpsUri = finalCleanUri;
+                    dialog.dismiss();
+                    beginShareQueue(item, useLocation, true, useOriginal);
+                });
+            }, "smart-share-prepare-no-gps").start();
         }));
         dialog.show();
+    }
+
+    private void beginShareQueue(PlaceItem item, boolean useLocation, boolean useVisible, boolean useOriginal) {
+        shareQueue.clear();
+        if (useLocation) shareQueue.add(SHARE_LOCATION);
+        if (useVisible) shareQueue.add(SHARE_VISIBLE_NO_GPS);
+        if (useOriginal) shareQueue.add(SHARE_ORIGINAL_FILE);
+        queuedShareItem = item;
+        shareQueueIndex = 0;
+        launchNextQueuedShare();
     }
 
     private CheckBox checkBox(String text, boolean checked) {
@@ -411,6 +452,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 Toast.makeText(this, "แชร์ครบรายการที่เลือกแล้ว", Toast.LENGTH_SHORT).show();
             }
             queuedShareItem = null;
+            preparedVisibleNoGpsUri = null;
             shareQueue.clear();
             shareQueueIndex = 0;
             loadPlaces();
@@ -422,12 +464,12 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         if (kind == SHARE_LOCATION) {
             Toast.makeText(this, "รายการ " + step + " • ตำแหน่ง + ลิงก์", Toast.LENGTH_SHORT).show();
             shareLocationText(item);
-        } else if (kind == SHARE_ORIGINAL_FILE) {
-            Toast.makeText(this, "รายการ " + step + " • ไฟล์ต้นฉบับพร้อม GPS", Toast.LENGTH_SHORT).show();
-            shareOriginalFile(item);
-        } else {
+        } else if (kind == SHARE_VISIBLE_NO_GPS) {
             Toast.makeText(this, "รายการ " + step + " • ภาพปกติไม่มี GPS", Toast.LENGTH_SHORT).show();
             shareVisibleImageWithoutGps(item);
+        } else {
+            Toast.makeText(this, "รายการ " + step + " • ไฟล์ต้นฉบับพร้อม GPS (รายการสุดท้าย)", Toast.LENGTH_SHORT).show();
+            shareOriginalFile(item);
         }
     }
 
@@ -450,45 +492,30 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     }
 
     private void shareVisibleImageWithoutGps(PlaceItem item) {
-        new Thread(() -> {
-            Uri cleanUri = null;
-            String error = null;
-            try {
-                cleanUri = ShareImageSanitizer.createGpsFreeShareUri(
-                        this, item.uri, item.name);
-            } catch (Exception e) {
-                error = messageOf(e);
-            }
-            Uri finalUri = cleanUri;
-            String finalError = error;
-            runOnUiThread(() -> {
-                if (finalUri == null) {
-                    Toast.makeText(this,
-                            finalError == null ? "สร้างภาพแบบไม่มี GPS ไม่สำเร็จ" : finalError,
-                            Toast.LENGTH_LONG).show();
-                    handler.postDelayed(this::launchNextQueuedShare, 250L);
-                    return;
-                }
-                Intent share = new Intent(Intent.ACTION_SEND);
-                String mime = getContentResolver().getType(item.uri);
-                share.setType(mime != null && mime.startsWith("image/") ? mime : "image/jpeg");
-                share.putExtra(Intent.EXTRA_STREAM, finalUri);
-                share.putExtra(Intent.EXTRA_TITLE, friendlyName(item.name) + "_NoGPS");
-                share.setClipData(ClipData.newUri(getContentResolver(), "DormCamera_NoGPS", finalUri));
-                share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                launchShareIntent(share, "แชร์ภาพปกติ (ไม่มี GPS)");
-            });
-        }, "smart-share-no-gps").start();
+        Uri cleanUri = preparedVisibleNoGpsUri;
+        if (cleanUri == null) {
+            Toast.makeText(this, "ไม่พบภาพไม่มี GPS ที่เตรียมไว้", Toast.LENGTH_LONG).show();
+            handler.postDelayed(this::launchNextQueuedShare, 300L);
+            return;
+        }
+        Intent share = new Intent(Intent.ACTION_SEND);
+        String mime = getContentResolver().getType(cleanUri);
+        share.setType(mime != null && mime.startsWith("image/") ? mime : "image/jpeg");
+        share.putExtra(Intent.EXTRA_STREAM, cleanUri);
+        share.putExtra(Intent.EXTRA_TITLE, friendlyName(item.name) + "_NoGPS");
+        share.setClipData(ClipData.newUri(getContentResolver(), "DormCamera_NoGPS", cleanUri));
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        launchShareIntent(share, "แชร์ภาพปกติ (ไม่มี GPS)");
     }
 
     private void launchShareIntent(Intent share, String chooserTitle) {
         try {
             waitingForShareReturn = true;
             startActivity(Intent.createChooser(share, chooserTitle));
-        } catch (ActivityNotFoundException e) {
+        } catch (Exception e) {
             waitingForShareReturn = false;
-            Toast.makeText(this, "ไม่พบแอปสำหรับแชร์", Toast.LENGTH_LONG).show();
-            handler.postDelayed(this::launchNextQueuedShare, 250L);
+            Toast.makeText(this, "เปิดการแชร์ไม่สำเร็จ: " + messageOf(e), Toast.LENGTH_LONG).show();
+            handler.postDelayed(this::launchNextQueuedShare, 300L);
         }
     }
 
