@@ -37,6 +37,19 @@ public final class ToolsActivity extends AppCompatActivity {
         root.addView(subtitle, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        PressFeedbackButton myPlaces = makeButton("📍  สถานที่ของฉัน");
+        myPlaces.setContentDescription("ค้นหาภาพที่มี GPS รายการโปรด นำทาง และแชร์สถานที่");
+        myPlaces.setOnClickListener(v -> startActivity(new Intent(this, MyPlacesActivity.class)));
+        root.addView(myPlaces, buttonParams());
+
+        TextView placeDetail = new TextView(this);
+        placeDetail.setText("ค้นหาจากชื่อภาพ • ⭐ รายการโปรด • เปิดแผนที่ • นำทาง • แชร์ภาพพร้อมลิงก์แผนที่");
+        placeDetail.setTextColor(0xFF8FC9A3);
+        placeDetail.setTextSize(12f);
+        placeDetail.setPadding(dp(8), 0, dp(8), dp(14));
+        root.addView(placeDetail, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         PressFeedbackButton navigator = makeButton("🧭  นำทาง / GPS จากภาพ");
         navigator.setContentDescription("เลือกภาพ เพิ่ม GPS จากแผนที่ ตั้งชื่อสำเนา แล้วนำทาง");
         navigator.setOnClickListener(v -> startActivity(new Intent(this, PhotoNavigatorV024Activity.class)));
@@ -55,7 +68,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView note = new TextView(this);
-        note.setText("V0.2.4 • สำเนาพร้อม GPS บันทึกใน Pictures/DormCamera");
+        note.setText("V0.2.5 • สถานที่ของฉันอ่านจาก Pictures/DormCamera โดยตรง");
         note.setTextColor(0xFF8F929A);
         note.setTextSize(12f);
         note.setPadding(dp(4), dp(6), dp(4), 0);
