@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
@@ -19,6 +20,8 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <activity android:name=".MapPickerActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name=".PhotoNavigatorV024Activity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorFixedActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".ToolsActivity" android:screenOrientation="portrait" android:exported="false" />
