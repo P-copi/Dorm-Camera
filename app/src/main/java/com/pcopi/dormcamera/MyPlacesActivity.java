@@ -1,6 +1,7 @@
 package com.pcopi.dormcamera;
 
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Intent;
@@ -27,6 +28,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.exifinterface.media.ExifInterface;
 
@@ -38,7 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** V0.2.5 - searchable GPS photo library with favorites and sharing. */
+/** V0.2.6 - searchable GPS photo library with LINE-safe sharing choices. */
 public final class MyPlacesActivity extends AppCompatActivity {
     private static final String PREFS = "my_places_v025";
     private static final String KEY_FAVORITES = "favorite_uris";
@@ -383,22 +385,54 @@ public final class MyPlacesActivity extends AppCompatActivity {
     }
 
     private void sharePlace(PlaceItem item) {
+        String[] choices = {
+                "📍 แชร์ตำแหน่ง + ลิงก์แผนที่",
+                "📎 แชร์ภาพเป็นไฟล์ (รักษา EXIF/GPS)"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("แชร์สถานที่")
+                .setMessage("LINE อาจลบ GPS เมื่อส่งเป็นรูปภาพปกติ\nเลือกวิธีที่ต้องการ")
+                .setItems(choices, (dialog, which) -> {
+                    if (which == 0) shareLocationText(item);
+                    else shareImageAsFile(item);
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
+    private String buildShareText(PlaceItem item) {
         String coord = String.format(Locale.US, "%.7f,%.7f", item.lat, item.lon);
         String link = "https://www.google.com/maps/search/?api=1&query=" + coord;
-        String text = friendlyName(item.name) + "\nพิกัด: " + coord + "\n" + link;
+        return friendlyName(item.name)
+                + "\nพิกัด: " + coord
+                + "\nเปิดแผนที่: " + link;
+    }
 
+    private void shareLocationText(PlaceItem item) {
         Intent share = new Intent(Intent.ACTION_SEND);
-        share.setType("image/*");
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_SUBJECT, friendlyName(item.name));
+        share.putExtra(Intent.EXTRA_TEXT, buildShareText(item));
+        try {
+            startActivity(Intent.createChooser(share, "แชร์ตำแหน่ง / ลิงก์แผนที่"));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "ไม่พบแอปสำหรับแชร์ข้อความ", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void shareImageAsFile(PlaceItem item) {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("application/octet-stream");
         share.putExtra(Intent.EXTRA_STREAM, item.uri);
-        share.putExtra(Intent.EXTRA_TEXT, text);
+        share.putExtra(Intent.EXTRA_TITLE, item.name);
+        share.setClipData(ClipData.newUri(getContentResolver(), item.name, item.uri));
         share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
-            startActivity(Intent.createChooser(share, "แชร์สถานที่"));
+            Toast.makeText(this,
+                    "เลือก LINE แล้วส่งเป็นไฟล์ เพื่อรักษา GPS ในภาพ", Toast.LENGTH_LONG).show();
+            startActivity(Intent.createChooser(share, "แชร์ภาพเป็นไฟล์"));
         } catch (ActivityNotFoundException e) {
-            Intent textOnly = new Intent(Intent.ACTION_SEND);
-            textOnly.setType("text/plain");
-            textOnly.putExtra(Intent.EXTRA_TEXT, text);
-            startActivity(Intent.createChooser(textOnly, "แชร์ตำแหน่ง"));
+            Toast.makeText(this, "ไม่พบแอปสำหรับแชร์ไฟล์", Toast.LENGTH_LONG).show();
         }
     }
 
