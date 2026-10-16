@@ -20,6 +20,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <activity android:name=".MyPlacesActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".MapPickerActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorV024Activity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorFixedActivity" android:screenOrientation="portrait" android:exported="false" />
