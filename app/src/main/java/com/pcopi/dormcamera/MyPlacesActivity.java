@@ -40,7 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** V0.2.6 - searchable GPS photo library with LINE-safe sharing choices. */
+/** V0.2.7 - searchable GPS photo library with Samsung-safe share chooser. */
 public final class MyPlacesActivity extends AppCompatActivity {
     private static final String PREFS = "my_places_v025";
     private static final String KEY_FAVORITES = "favorite_uris";
@@ -385,19 +385,43 @@ public final class MyPlacesActivity extends AppCompatActivity {
     }
 
     private void sharePlace(PlaceItem item) {
-        String[] choices = {
-                "📍 แชร์ตำแหน่ง + ลิงก์แผนที่",
-                "📎 แชร์ภาพเป็นไฟล์ (รักษา EXIF/GPS)"
-        };
-        new AlertDialog.Builder(this)
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(4), dp(20), dp(6));
+
+        TextView note = new TextView(this);
+        note.setText("LINE อาจลบ GPS เมื่อส่งเป็นรูปภาพปกติ\nเลือกวิธีแชร์ที่ต้องการ");
+        note.setTextColor(0xFFB9BBC2);
+        note.setTextSize(15f);
+        note.setLineSpacing(0f, 1.15f);
+        note.setPadding(0, 0, 0, dp(14));
+        content.addView(note, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        PressFeedbackButton locationButton = makeButton("📍  แชร์ตำแหน่ง + ลิงก์แผนที่", 15f);
+        PressFeedbackButton fileButton = makeButton("📎  แชร์ภาพเป็นไฟล์ (รักษา GPS)", 15f);
+        LinearLayout.LayoutParams firstParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(58));
+        firstParams.setMargins(0, 0, 0, dp(10));
+        content.addView(locationButton, firstParams);
+        content.addView(fileButton, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("แชร์สถานที่")
-                .setMessage("LINE อาจลบ GPS เมื่อส่งเป็นรูปภาพปกติ\nเลือกวิธีที่ต้องการ")
-                .setItems(choices, (dialog, which) -> {
-                    if (which == 0) shareLocationText(item);
-                    else shareImageAsFile(item);
-                })
+                .setView(content)
                 .setNegativeButton("ยกเลิก", null)
-                .show();
+                .create();
+
+        locationButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            shareLocationText(item);
+        });
+        fileButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            shareImageAsFile(item);
+        });
+        dialog.show();
     }
 
     private String buildShareText(PlaceItem item) {
