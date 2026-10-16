@@ -20,6 +20,39 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_file_paths" />
+        </provider>
+
+        <activity
+            android:name=".ReceiveShareActivity"
+            android:screenOrientation="portrait"
+            android:exported="true"
+            android:label="Dorm Camera • นำทางจากภาพ">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".MyPlacesV028Activity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".MyPlacesActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".MapPickerActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorV024Activity" android:screenOrientation="portrait" android:exported="false" />
