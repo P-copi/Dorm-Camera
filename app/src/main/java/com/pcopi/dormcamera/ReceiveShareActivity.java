@@ -239,6 +239,10 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     }
 
     private void handleSharedImage(@NonNull Uri uri) {
+        if (isZipFile(uri)) {
+            receiveImageFromZip(uri);
+            return;
+        }
         sharedImageUri = uri;
         sharedLink = null;
         imageView.setVisibility(View.VISIBLE);
@@ -284,6 +288,50 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isZipFile(@NonNull Uri uri) {
+        String name = displayName(uri).toLowerCase(Locale.US);
+        if (name.endsWith(".zip")) return true;
+        try {
+            String mime = getContentResolver().getType(uri);
+            return "application/zip".equalsIgnoreCase(mime)
+                    || "application/x-zip-compressed".equalsIgnoreCase(mime);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void receiveImageFromZip(@NonNull Uri zipUri) {
+        sharedImageUri = null;
+        sharedLink = null;
+        imageView.setImageDrawable(null);
+        imageView.setVisibility(View.VISIBLE);
+        titleText.setText("กำลังเปิด ZIP ภาพพร้อม GPS");
+        statusText.setText("กำลังแยกไฟล์ภาพต้นฉบับ โดยไม่แก้ไข EXIF...");
+        detailText.setText("");
+        setCoordinateActions(false);
+        addGpsButton.setVisibility(View.GONE);
+        linkButton.setVisibility(View.GONE);
+        new Thread(() -> {
+            Uri extracted = null;
+            String error = null;
+            try {
+                extracted = ShareGpsArchive.extractFirstImage(this, zipUri);
+            } catch (Exception e) {
+                error = messageOf(e);
+            }
+            Uri result = extracted;
+            String message = error;
+            runOnUiThread(() -> {
+                if (result == null) {
+                    showUnsupported("อ่านภาพใน ZIP ไม่สำเร็จ: "
+                            + (message == null ? "ไม่ทราบสาเหตุ" : message));
+                } else {
+                    handleSharedImage(result);
+                }
+            });
+        }, "dorm-unzip-shared-gps").start();
+    }
+
     private void handleSharedText(@NonNull String value) {
         sharedImageUri = null;
         imageView.setVisibility(View.GONE);
@@ -326,7 +374,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         imageView.setVisibility(View.GONE);
         titleText.setText("รับข้อมูลไม่สำเร็จ");
         statusText.setText(message);
-        detailText.setText("ลองแชร์เป็นไฟล์ภาพ หรือแชร์ข้อความพิกัด / ลิงก์แผนที่อีกครั้ง");
+        detailText.setText("ลองดาวน์โหลดไฟล์จาก LINE แล้วเข้าเครื่องมือ → รับไฟล์ภาพจาก LINE / เพื่อน เพื่อตรวจ JPG หรือ ZIP");
         setCoordinateActions(false);
         addGpsButton.setVisibility(View.GONE);
         linkButton.setVisibility(View.GONE);
