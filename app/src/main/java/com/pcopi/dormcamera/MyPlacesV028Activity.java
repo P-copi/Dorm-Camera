@@ -65,6 +65,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     private int shareQueueIndex;
     @Nullable private PlaceItem queuedShareItem;
     @Nullable private Uri preparedVisibleNoGpsUri;
+    @Nullable private Uri preparedGpsZipUri;
     private SharedPreferences prefs;
 
     @Override
@@ -114,7 +115,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.9 • ค้นหา • ⭐ โปรด • Smart Share 3 แบบ");
+        subtitle.setText("V0.2.11 • Smart Share ภาพ JPEG / GPS ZIP");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
@@ -342,9 +343,9 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.setPadding(dp(18), dp(4), dp(18), dp(4));
 
         TextView note = new TextView(this);
-        note.setText("เลือกได้หลายรายการ แล้วกด “เริ่มแชร์” ครั้งเดียว\n"
-                + "ภาพไม่มี GPS จะเตรียมให้เสร็จก่อนเริ่มแชร์\n"
-                + "ไฟล์ต้นฉบับพร้อม GPS จะส่งเป็นรายการสุดท้าย");
+        note.setText("ติ๊กได้หลายรายการ • กดเริ่มแชร์ครั้งเดียว\n"
+                + "ระบบจะเตรียมไฟล์และตรวจสอบก่อนเปิด LINE\n"
+                + "ไฟล์ GPS ส่งเป็น ZIP เพื่อรักษา EXIF ทุกไบต์");
         note.setTextColor(0xFFB9BBC2);
         note.setTextSize(14f);
         note.setLineSpacing(0f, 1.15f);
@@ -352,7 +353,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(note);
 
         CheckBox location = checkBox("📍 แชร์ตำแหน่ง + ลิงก์แผนที่", true);
-        CheckBox original = checkBox("📎 แชร์ภาพเป็นไฟล์ (รักษา GPS)", true);
+        CheckBox original = checkBox("📎 แชร์ภาพ GPS เป็นไฟล์ ZIP (รักษา EXIF)", true);
         CheckBox visible = checkBox("🖼 ภาพปกติ (เห็นภาพ • ไม่มี GPS)", true);
         content.addView(location, checkParams());
         content.addView(original, checkParams());
@@ -380,39 +381,54 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 return;
             }
 
-            if (!useVisible) {
+            if (!useVisible && !useOriginal) {
                 preparedVisibleNoGpsUri = null;
+                preparedGpsZipUri = null;
                 dialog.dismiss();
-                beginShareQueue(item, useLocation, useVisible, useOriginal);
+                beginShareQueue(item, useLocation, false, false);
                 return;
             }
 
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("กำลังเตรียมภาพ...");
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("กำลังเตรียมไฟล์...");
             new Thread(() -> {
                 Uri cleanUri = null;
+                Uri gpsZipUri = null;
                 String error = null;
                 try {
-                    cleanUri = ShareImageSanitizer.createGpsFreeShareUri(this, item.uri, item.name);
+                    if (useVisible) {
+                        cleanUri = ShareImageSanitizer.createGpsFreeShareUri(
+                                this, item.uri, item.name);
+                    }
+                    if (useOriginal) {
+                        gpsZipUri = ShareGpsArchive.createGpsZip(
+                                this, item.uri, item.name);
+                    }
                 } catch (Exception e) {
                     error = messageOf(e);
                 }
-                Uri finalCleanUri = cleanUri;
+                Uri finalClean = cleanUri;
+                Uri finalZip = gpsZipUri;
                 String finalError = error;
                 runOnUiThread(() -> {
-                    if (finalCleanUri == null) {
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("เริ่มแชร์");
-                        Toast.makeText(this,
-                                finalError == null ? "เตรียมภาพแบบไม่มี GPS ไม่สำเร็จ" : finalError,
-                                Toast.LENGTH_LONG).show();
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("เริ่มแชร์");
+                    if (finalError != null) {
+                        new AlertDialog.Builder(this)
+                                .setTitle("เตรียมไฟล์แชร์ไม่สำเร็จ")
+                                .setMessage(finalError
+                                        + "\n\nลองติ๊กเฉพาะภาพปกติ หรือเฉพาะภาพ GPS "
+                                        + "เพื่อดูว่าขั้นตอนไหนติดขัด")
+                                .setPositiveButton("ตกลง", null)
+                                .show();
                         return;
                     }
-                    preparedVisibleNoGpsUri = finalCleanUri;
+                    preparedVisibleNoGpsUri = finalClean;
+                    preparedGpsZipUri = finalZip;
                     dialog.dismiss();
-                    beginShareQueue(item, useLocation, true, useOriginal);
+                    beginShareQueue(item, useLocation, useVisible, useOriginal);
                 });
-            }, "smart-share-prepare-no-gps").start();
+            }, "smart-share-preflight-v0211").start();
         }));
         dialog.show();
     }
@@ -449,10 +465,11 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         PlaceItem item = queuedShareItem;
         if (item == null || shareQueueIndex >= shareQueue.size()) {
             if (queuedShareItem != null) {
-                Toast.makeText(this, "แชร์ครบรายการที่เลือกแล้ว", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "เปิดหน้าต่างแชร์ครบแล้ว • ตรวจสอบการส่งใน LINE", Toast.LENGTH_LONG).show();
             }
             queuedShareItem = null;
             preparedVisibleNoGpsUri = null;
+            preparedGpsZipUri = null;
             shareQueue.clear();
             shareQueueIndex = 0;
             loadPlaces();
@@ -468,7 +485,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
             Toast.makeText(this, "รายการ " + step + " • ภาพปกติไม่มี GPS", Toast.LENGTH_SHORT).show();
             shareVisibleImageWithoutGps(item);
         } else {
-            Toast.makeText(this, "รายการ " + step + " • ไฟล์ต้นฉบับพร้อม GPS (รายการสุดท้าย)", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "รายการ " + step + " • ZIP ภาพ GPS (รายการสุดท้าย)", Toast.LENGTH_SHORT).show();
             shareOriginalFile(item);
         }
     }
@@ -482,25 +499,28 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     }
 
     private void shareOriginalFile(PlaceItem item) {
+        Uri gpsZip = preparedGpsZipUri;
+        if (gpsZip == null) {
+            showShareError("ยังไม่ได้เตรียม ZIP ภาพพร้อม GPS");
+            return;
+        }
         Intent share = new Intent(Intent.ACTION_SEND);
-        share.setType("application/octet-stream");
-        share.putExtra(Intent.EXTRA_STREAM, item.uri);
-        share.putExtra(Intent.EXTRA_TITLE, item.name);
-        share.setClipData(ClipData.newUri(getContentResolver(), item.name, item.uri));
+        share.setType("application/zip");
+        share.putExtra(Intent.EXTRA_STREAM, gpsZip);
+        share.putExtra(Intent.EXTRA_TITLE, friendlyName(item.name) + "_GPS.zip");
+        share.setClipData(ClipData.newUri(getContentResolver(), "DormCamera_GPS.zip", gpsZip));
         share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        launchShareIntent(share, "แชร์ภาพเป็นไฟล์ (รักษา GPS)");
+        launchShareIntent(share, "ส่ง ZIP ที่รักษา GPS ในภาพต้นฉบับ");
     }
 
     private void shareVisibleImageWithoutGps(PlaceItem item) {
         Uri cleanUri = preparedVisibleNoGpsUri;
         if (cleanUri == null) {
-            Toast.makeText(this, "ไม่พบภาพไม่มี GPS ที่เตรียมไว้", Toast.LENGTH_LONG).show();
-            handler.postDelayed(this::launchNextQueuedShare, 300L);
+            showShareError("ยังไม่ได้เตรียม JPEG ไม่มี GPS");
             return;
         }
         Intent share = new Intent(Intent.ACTION_SEND);
-        String mime = getContentResolver().getType(cleanUri);
-        share.setType(mime != null && mime.startsWith("image/") ? mime : "image/jpeg");
+        share.setType("image/jpeg");
         share.putExtra(Intent.EXTRA_STREAM, cleanUri);
         share.putExtra(Intent.EXTRA_TITLE, friendlyName(item.name) + "_NoGPS");
         share.setClipData(ClipData.newUri(getContentResolver(), "DormCamera_NoGPS", cleanUri));
@@ -510,13 +530,33 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
 
     private void launchShareIntent(Intent share, String chooserTitle) {
         try {
+            // Grant the temporary URI to the selected app, not just the chooser.
+            Intent chooser = Intent.createChooser(share, chooserTitle);
+            if (share.getClipData() != null) {
+                chooser.setClipData(share.getClipData());
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
             waitingForShareReturn = true;
-            startActivity(Intent.createChooser(share, chooserTitle));
+            startActivity(chooser);
         } catch (Exception e) {
             waitingForShareReturn = false;
-            Toast.makeText(this, "เปิดการแชร์ไม่สำเร็จ: " + messageOf(e), Toast.LENGTH_LONG).show();
-            handler.postDelayed(this::launchNextQueuedShare, 300L);
+            showShareError("เปิดการแชร์ไม่สำเร็จ: " + messageOf(e));
         }
+    }
+
+    private void showShareError(String error) {
+        new AlertDialog.Builder(this)
+                .setTitle("แชร์ภาพไม่สำเร็จ")
+                .setMessage(error + "\n\nคุณสามารถกลับมาลองแชร์ใหม่ได้โดยไม่แก้ภาพต้นฉบับ")
+                .setPositiveButton("ตกลง", (dialog, which) -> {
+                    queuedShareItem = null;
+                    shareQueue.clear();
+                    preparedGpsZipUri = null;
+                    preparedVisibleNoGpsUri = null;
+                    shareQueueIndex = 0;
+                    waitingForShareReturn = false;
+                })
+                .show();
     }
 
     private String buildShareText(PlaceItem item) {
