@@ -113,7 +113,7 @@ public final class ShareGpsArchive {
         name = name.replace('\\', '/');
         int slash = name.lastIndexOf('/');
         if (slash >= 0) name = name.substring(slash + 1);
-        name = name.replaceAll("[^\\p{L}\\p{N}._ -]", "_").trim();
+        name = name.replaceAll("[^\\p{L}\\p{M}\\p{N}._ -]", "_").trim();
         if (name.isEmpty()) name = "DormCamera" + fallbackExt;
         if (name.length() > 105) {
             int dot = name.lastIndexOf('.');
