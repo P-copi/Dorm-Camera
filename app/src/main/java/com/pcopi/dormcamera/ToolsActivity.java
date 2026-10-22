@@ -55,6 +55,11 @@ public final class ToolsActivity extends AppCompatActivity {
         navigator.setOnClickListener(v -> startActivity(new Intent(this, PhotoNavigatorV024Activity.class)));
         root.addView(navigator, buttonParams());
 
+        PressFeedbackButton importLine = makeButton("📥  รับไฟล์ภาพจาก LINE / เพื่อน");
+        importLine.setContentDescription("เลือกไฟล์ภาพ JPG ที่ดาวน์โหลดจาก LINE และอ่าน GPS เพื่อเปิดนำทาง");
+        importLine.setOnClickListener(v -> startActivity(new Intent(this, ReceiveShareActivity.class)));
+        root.addView(importLine, buttonParams());
+
         TextView detail = new TextView(this);
         detail.setText("• เลือกตำแหน่งด้วยนิ้วจากแผนที่ หรือใช้เป้ากลางจอ\n"
                 + "• สลับแผนที่ / ดาวเทียม และค้นหาชื่อสถานที่ได้\n"
@@ -68,7 +73,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView note = new TextView(this);
-        note.setText("V0.2.8 • LINE → แชร์ → Dorm Camera → ตรวจ GPS / นำทางได้ทันที");
+        note.setText("V0.2.10 • รองรับ Share / Open with / เลือกไฟล์จาก LINE");
         note.setTextColor(0xFF8F929A);
         note.setTextSize(12f);
         note.setPadding(dp(4), dp(6), dp(4), 0);
