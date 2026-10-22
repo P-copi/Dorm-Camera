@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 /** Receives images, files, coordinates, and map links shared from LINE/other apps. */
 public final class ReceiveShareActivity extends AppCompatActivity {
     private static final int REQ_MAP_PICKER = 2810;
+    private static final int REQ_PICK_DOWNLOADED_FILE = 2811;
     private static final Pattern COORD_PATTERN = Pattern.compile(
             "(?<![\\d.])([-+]?\\d{1,2}(?:\\.\\d+)?)\\s*[,，]\\s*([-+]?\\d{1,3}(?:\\.\\d+)?)(?![\\d.])");
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
@@ -45,6 +46,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     private PressFeedbackButton navButton;
     private PressFeedbackButton addGpsButton;
     private PressFeedbackButton linkButton;
+    private PressFeedbackButton chooseFileButton;
 
     @Nullable private Uri sharedImageUri;
     @Nullable private String sharedLink;
@@ -57,6 +59,13 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         buildUi();
         handleIncomingIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncomingIntent(intent);
     }
 
     private void buildUi() {
@@ -128,6 +137,13 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         linkParams.setMargins(0, dp(8), 0, 0);
         root.addView(linkButton, linkParams);
 
+        chooseFileButton = button("📂 เลือกไฟล์ภาพที่บันทึกจาก LINE", 14f);
+        chooseFileButton.setOnClickListener(v -> pickDownloadedFile());
+        LinearLayout.LayoutParams chooseParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
+        chooseParams.setMargins(0, dp(8), 0, 0);
+        root.addView(chooseFileButton, chooseParams);
+
         setContentView(root);
         setCoordinateActions(false);
         addGpsButton.setVisibility(View.GONE);
@@ -142,6 +158,11 @@ public final class ReceiveShareActivity extends AppCompatActivity {
 
         Uri stream = extractStreamUri(intent);
         if (stream != null) {
+            String scheme = stream.getScheme();
+            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                handleSharedText(stream.toString());
+                return;
+            }
             handleSharedImage(stream);
             return;
         }
@@ -156,27 +177,52 @@ public final class ReceiveShareActivity extends AppCompatActivity {
             return;
         }
 
-        showUnsupported("ยังไม่รองรับข้อมูลชนิดนี้");
+        showUnsupported("ไม่พบไฟล์/พิกัดที่แชร์มา กดเลือกไฟล์ภาพจากเครื่องได้");
     }
 
     @Nullable
     private Uri extractStreamUri(Intent intent) {
+        // Some versions of LINE use SEND_MULTIPLE even for a single document.
         try {
             if (Build.VERSION.SDK_INT >= 33) {
-                Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri.class);
-                if (uri != null) return uri;
+                Uri single = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri.class);
+                if (single != null) return single;
+                java.util.ArrayList<Uri> many =
+                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri.class);
+                if (many != null && !many.isEmpty()) return many.get(0);
             } else {
-                Object value = intent.getParcelableExtra(Intent.EXTRA_STREAM);
-                if (value instanceof Uri) return (Uri) value;
+                Object single = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (single instanceof Uri) return (Uri) single;
+                java.util.ArrayList<?> many =
+                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (many != null && !many.isEmpty() && many.get(0) instanceof Uri)
+                    return (Uri) many.get(0);
             }
         } catch (Exception ignored) {}
 
         ClipData clip = intent.getClipData();
-        if (clip != null && clip.getItemCount() > 0) {
-            Uri uri = clip.getItemAt(0).getUri();
-            if (uri != null) return uri;
+        if (clip != null) {
+            for (int i = 0; i < clip.getItemCount(); i++) {
+                Uri uri = clip.getItemAt(i).getUri();
+                if (uri != null) return uri;
+            }
         }
+        // Also handles ACTION_VIEW: Uri from LINE Documents/Samsung My Files.
         return intent.getData();
+    }
+
+    private void pickDownloadedFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // Do not restrict to image/*: LINE may label the JPEG as application/octet-stream.
+        intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQ_PICK_DOWNLOADED_FILE);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "ไม่พบตัวเลือกไฟล์ในเครื่อง", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void handleSharedImage(@NonNull Uri uri) {
@@ -188,7 +234,10 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         String name = displayName(uri);
         titleText.setText(name);
         statusText.setText("กำลังตรวจ GPS ในภาพ...");
-        detailText.setText("");
+        String actualMime = getContentResolver().getType(uri);
+        // Report how LINE/file manager labelled the attachment for diagnosis.
+        String formatNote = actualMime == null ? "ไม่ระบุ" : actualMime;
+        detailText.setText("ชนิดไฟล์: " + formatNote);
         linkButton.setVisibility(View.GONE);
         addGpsButton.setVisibility(View.GONE);
         setCoordinateActions(false);
@@ -203,13 +252,13 @@ public final class ReceiveShareActivity extends AppCompatActivity {
                 hasCoordinate = true;
                 statusText.setText("✓ พบ GPS ในไฟล์นี้");
                 detailText.setText(String.format(Locale.US,
-                        "📍 %.7f, %.7f\nกด “นำทาง” ได้ทันที", latitude, longitude));
+                        "📍 %.7f, %.7f\nกด “นำทาง” ได้ทันที\nชนิดไฟล์: %s", latitude, longitude, formatNote));
                 setCoordinateActions(true);
             } else {
                 hasCoordinate = false;
                 statusText.setText("ไม่พบ GPS ในภาพนี้");
                 detailText.setText("ถ้าเป็นภาพที่ส่งใน LINE แบบรูปภาพปกติ EXIF/GPS อาจถูกลบแล้ว\n"
-                        + "สามารถเลือกตำแหน่งจากแผนที่เพื่อสร้างสำเนาพร้อม GPS ได้");
+                        + "สามารถเลือกตำแหน่งจากแผนที่เพื่อสร้างสำเนาพร้อม GPS ได้\nชนิดไฟล์: " + formatNote);
                 addGpsButton.setVisibility(View.VISIBLE);
             }
         } catch (Exception e) {
@@ -317,6 +366,17 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PICK_DOWNLOADED_FILE) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                Uri file = data.getData();
+                try {
+                    getContentResolver().takePersistableUriPermission(file,
+                            data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception ignored) {}
+                handleSharedImage(file);
+            }
+            return;
+        }
         if (requestCode != REQ_MAP_PICKER || resultCode != RESULT_OK || data == null) return;
         double lat = data.getDoubleExtra(MapPickerActivity.EXTRA_LAT, Double.NaN);
         double lon = data.getDoubleExtra(MapPickerActivity.EXTRA_LON, Double.NaN);
