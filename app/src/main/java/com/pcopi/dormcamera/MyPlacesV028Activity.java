@@ -359,8 +359,14 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(original, checkParams());
         content.addView(visible, checkParams());
 
+        PressFeedbackButton saveBackup = makeButton("💾 สำรอง JPEG + GPS ZIP ใน Downloads", 13f);
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        saveParams.setMargins(0, dp(8), 0, dp(4));
+        content.addView(saveBackup, saveParams);
+
         TextView privacy = new TextView(this);
-        privacy.setText("หมายเหตุ: LINE ยังต้องให้เลือกผู้รับ/ยืนยันการส่งทีละรายการ");
+        privacy.setText("หาก LINE แชร์ตรงไม่ได้ ให้บันทึกไฟล์แล้วเข้า LINE → + → ไฟล์\nLINE ยังต้องให้เลือกผู้รับและยืนยันการส่ง");
         privacy.setTextColor(0xFF8F929A);
         privacy.setTextSize(11f);
         privacy.setPadding(0, dp(8), 0, 0);
@@ -430,6 +436,39 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 });
             }, "smart-share-preflight-v0211").start();
         }));
+        saveBackup.setOnClickListener(v -> {
+            saveBackup.setEnabled(false);
+            saveBackup.setText("กำลังเตรียมไฟล์สำรอง...");
+            new Thread(() -> {
+                String base = ShareToDownloads.cleanName(friendlyName(item.name));
+                String stamp = "_" + System.currentTimeMillis();
+                StringBuilder result = new StringBuilder();
+                try {
+                    Uri image = ShareImageSanitizer.createGpsFreeShareUri(this, item.uri, item.name);
+                    ShareToDownloads.save(this, image, base + stamp + "_NoGPS.jpg", "image/jpeg");
+                    result.append("✓ JPEG ไม่มี GPS: บันทึกแล้ว\n");
+                } catch (Exception e) {
+                    result.append("✗ JPEG ไม่มี GPS: ").append(messageOf(e)).append("\n");
+                }
+                try {
+                    Uri zip = ShareGpsArchive.createGpsZip(this, item.uri, item.name);
+                    ShareToDownloads.save(this, zip, base + stamp + "_GPS.zip", "application/zip");
+                    result.append("✓ ZIP รักษา GPS: บันทึกแล้ว\n");
+                } catch (Exception e) {
+                    result.append("✗ ZIP รักษา GPS: ").append(messageOf(e)).append("\n");
+                }
+                String summary = result.toString();
+                runOnUiThread(() -> {
+                    saveBackup.setEnabled(true);
+                    saveBackup.setText("💾 สำรอง JPEG + GPS ZIP ใน Downloads");
+                    new AlertDialog.Builder(this)
+                            .setTitle("บันทึกไฟล์สำหรับ LINE")
+                            .setMessage(summary + "\nดูไฟล์ได้ที่ My Files → Downloads → DormCamera"
+                                    + "\nแล้วเปิด LINE → + → ไฟล์ เพื่อส่งออก")
+                            .setPositiveButton("ตกลง", null).show();
+                });
+            }, "save-dorm-share-fallback").start();
+        });
         dialog.show();
     }
 
