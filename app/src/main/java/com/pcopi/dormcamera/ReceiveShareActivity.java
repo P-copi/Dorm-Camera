@@ -182,23 +182,22 @@ public final class ReceiveShareActivity extends AppCompatActivity {
 
     @Nullable
     private Uri extractStreamUri(Intent intent) {
-        // Some versions of LINE use SEND_MULTIPLE even for a single document.
+        // LINE can send one document with SEND_MULTIPLE/EXTRA_STREAM ArrayList.
+        if (Intent.ACTION_SEND_MULTIPLE.equals(intent.getAction())) {
+            Uri many = firstStreamFromList(intent);
+            if (many != null) return many;
+        }
         try {
             if (Build.VERSION.SDK_INT >= 33) {
                 Uri single = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri.class);
                 if (single != null) return single;
-                java.util.ArrayList<Uri> many =
-                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri.class);
-                if (many != null && !many.isEmpty()) return many.get(0);
             } else {
                 Object single = intent.getParcelableExtra(Intent.EXTRA_STREAM);
                 if (single instanceof Uri) return (Uri) single;
-                java.util.ArrayList<?> many =
-                        intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
-                if (many != null && !many.isEmpty() && many.get(0) instanceof Uri)
-                    return (Uri) many.get(0);
             }
         } catch (Exception ignored) {}
+        Uri many = firstStreamFromList(intent);
+        if (many != null) return many;
 
         ClipData clip = intent.getClipData();
         if (clip != null) {
@@ -207,8 +206,22 @@ public final class ReceiveShareActivity extends AppCompatActivity {
                 if (uri != null) return uri;
             }
         }
-        // Also handles ACTION_VIEW: Uri from LINE Documents/Samsung My Files.
+        // Android ACTION_VIEW from LINE Documents / Samsung My Files.
         return intent.getData();
+    }
+
+    @Nullable
+    private Uri firstStreamFromList(Intent intent) {
+        try {
+            java.util.ArrayList<Uri> many;
+            if (Build.VERSION.SDK_INT >= 33) {
+                many = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri.class);
+            } else {
+                many = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            }
+            if (many != null && !many.isEmpty()) return many.get(0);
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private void pickDownloadedFile() {
@@ -234,7 +247,9 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         String name = displayName(uri);
         titleText.setText(name);
         statusText.setText("กำลังตรวจ GPS ในภาพ...");
-        String actualMime = getContentResolver().getType(uri);
+        String actualMime;
+        try { actualMime = getContentResolver().getType(uri); }
+        catch (Exception ignored) { actualMime = null; }
         // Report how LINE/file manager labelled the attachment for diagnosis.
         String formatNote = actualMime == null ? "ไม่ระบุ" : actualMime;
         detailText.setText("ชนิดไฟล์: " + formatNote);
