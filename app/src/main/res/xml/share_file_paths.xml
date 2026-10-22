@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="share_no_gps" path="share_no_gps/" />
+    <cache-path name="share_gps_zip" path="share_gps_zip/" />
+    <cache-path name="received_gps_zip" path="received_gps_zip/" />
 </paths>
