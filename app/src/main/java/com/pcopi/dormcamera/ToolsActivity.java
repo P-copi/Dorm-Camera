@@ -73,7 +73,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView note = new TextView(this);
-        note.setText("V0.2.11 • รองรับ JPEG ไม่มี GPS / GPS ZIP / รับไฟล์จาก LINE");
+        note.setText("V0.2.13 • รับไฟล์จาก LINE / Keep Memo พร้อมลองอ่านใหม่");
         note.setTextColor(0xFF8F929A);
         note.setTextSize(12f);
         note.setPadding(dp(4), dp(6), dp(4), 0);
