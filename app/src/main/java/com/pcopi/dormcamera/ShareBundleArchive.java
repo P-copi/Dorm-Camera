@@ -63,6 +63,7 @@ public final class ShareBundleArchive {
                     String coordinates = String.format(Locale.US, "%.7f,%.7f", latitude, longitude);
                     String info = "Dorm Camera - " + base
                             + "\nพิกัด: " + coordinates
+                            + "\nลิงก์นำทาง Google Maps: " + SmartGpsLink.navigationUrl(latitude, longitude)
                             + "\nเปิดแผนที่: https://www.google.com/maps/search/?api=1&query="
                             + coordinates + "\n";
                     zip.putNextEntry(new ZipEntry("01_location_and_map.txt"));
