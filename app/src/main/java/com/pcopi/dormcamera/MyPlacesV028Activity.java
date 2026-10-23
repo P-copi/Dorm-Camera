@@ -403,6 +403,12 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
         photoLinkParams.setMargins(0, dp(7), 0, 0);
         card.addView(photoLink, photoLinkParams);
+        PressFeedbackButton qrCard = makeButton("📷 ส่งภาพ + QR นำทาง (ครั้งเดียว ไม่ใช้ ZIP)", 13f);
+        qrCard.setOnClickListener(v -> sharePhotoMapQr(item));
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        qrParams.setMargins(0, dp(7), 0, 0);
+        card.addView(qrCard, qrParams);
         return card;
     }
 
@@ -465,6 +471,51 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                             launchShareIntent(share, "ทดลองส่ง JPEG พร้อมลิงก์ Google Maps");
                         });
                     }, "dorm-smart-gps-photo-text-share").start();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
+
+    /** Reliable single-message alternative: map URL is encoded in the picture QR,
+     * not promised as a clickable LINE caption. Original files remain untouched. */
+    private void sharePhotoMapQr(PlaceItem item) {
+        new AlertDialog.Builder(this)
+                .setTitle("ส่งภาพพร้อม QR นำทาง")
+                .setMessage("สร้าง JPEG ภาพเดียวที่มีชื่อสถานที่ พิกัด และ QR เปิด Google Maps "
+                        + "ผู้รับสแกน QR เพื่อเปิดเส้นทางได้ ไม่ใช่ลิงก์กดได้ในข้อความ LINE "
+                        + "ภาพต้นฉบับจะไม่ถูกแก้ไข")
+                .setPositiveButton("สร้างภาพและแชร์", (dialog, which) -> {
+                    Toast.makeText(this, "กำลังสร้างภาพพร้อม QR...", Toast.LENGTH_SHORT).show();
+                    new Thread(() -> {
+                        Uri ready = null;
+                        String error = null;
+                        try {
+                            Uri clean = ShareImageSanitizer.createGpsFreeShareUri(
+                                    this, item.uri, item.name);
+                            ready = MapPhotoCard.create(this, clean,
+                                    friendlyName(item.name), item.lat, item.lon);
+                        } catch (Exception e) {
+                            error = messageOf(e);
+                        }
+                        Uri result = ready;
+                        String failure = error;
+                        runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            if (result == null) {
+                                showPreparationError(failure == null ? "สร้างภาพ QR ไม่สำเร็จ" : failure);
+                                return;
+                            }
+                            clearShareQueueState();
+                            Intent share = new Intent(Intent.ACTION_SEND);
+                            share.setType("image/jpeg");
+                            share.putExtra(Intent.EXTRA_STREAM, result);
+                            share.setClipData(ClipData.newUri(getContentResolver(),
+                                    "DormCamera_MapQR", result));
+                            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            launchShareIntent(share, "ส่งภาพพร้อม QR นำทาง");
+                        });
+                    }, "dorm-share-map-qr").start();
                 })
                 .setNegativeButton("ยกเลิก", null)
                 .show();
