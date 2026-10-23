@@ -10,8 +10,10 @@ import android.os.Bundle;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
+/** Continuously refreshes both GPS and network location while the camera is visible. */
 public final class LocationHelper {
     public interface Callback {
         void onLocation(@NonNull Location location);
@@ -19,151 +21,151 @@ public final class LocationHelper {
     }
 
     private static final long STALE_AFTER_MS = 5 * 60 * 1000L;
-
     private final Context context;
     private final LocationManager locationManager;
-    private Location bestLocation;
+    @Nullable private Location bestLocation;
+    @Nullable private Callback listenerCallback;
+    private boolean tracking;
+
+    private final LocationListener trackingListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(@NonNull Location fix) {
+            consider(fix);
+            Location current = bestLocation;
+            if (current != null && !isStale(current) && listenerCallback != null) {
+                listenerCallback.onLocation(new Location(current));
+            }
+        }
+
+        @Override public void onProviderDisabled(@NonNull String provider) {
+            if (listenerCallback != null && getFreshLocation() == null) {
+                listenerCallback.onUnavailable("กำลังค้นหาตำแหน่ง");
+            }
+        }
+        @Override public void onProviderEnabled(@NonNull String provider) { }
+        @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
+    };
 
     public LocationHelper(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.locationManager = (LocationManager) this.context.getSystemService(Context.LOCATION_SERVICE);
     }
 
-    public static boolean isStale(Location location) {
+    public static boolean isStale(@Nullable Location location) {
         if (location == null) return true;
         long age = Math.abs(System.currentTimeMillis() - location.getTime());
-        return age > STALE_AFTER_MS;
+        return location.getTime() <= 0L || age > STALE_AFTER_MS;
     }
 
-    public Location getBestLocation() {
-        if (!hasPermission() || locationManager == null) {
-            return bestLocation;
-        }
-
-        Location gps = safeLastKnown(LocationManager.GPS_PROVIDER);
-        Location network = safeLastKnown(LocationManager.NETWORK_PROVIDER);
-        consider(gps);
-        consider(network);
-        return bestLocation;
+    @Nullable
+    public synchronized Location getBestLocation() {
+        if (!hasPermission() || locationManager == null) return copy(bestLocation);
+        consider(safeLastKnown(LocationManager.GPS_PROVIDER));
+        consider(safeLastKnown(LocationManager.NETWORK_PROVIDER));
+        return copy(bestLocation);
     }
 
+    @Nullable
+    public Location getFreshLocation() {
+        Location location = getBestLocation();
+        return isStale(location) ? null : location;
+    }
+
+    /** Kept for compatibility with existing MainActivity callbacks. */
     public void refresh(@NonNull Callback callback) {
+        startTracking(callback);
+    }
+
+    public void startTracking(@NonNull Callback callback) {
+        listenerCallback = callback;
         if (!hasPermission()) {
             callback.onUnavailable("ไม่อนุญาต");
             return;
         }
         if (locationManager == null) {
-            callback.onUnavailable("ไม่พร้อมใช้งาน");
+            callback.onUnavailable("ไม่มีบริการตำแหน่ง");
             return;
         }
+        Location existing = getFreshLocation();
+        if (existing != null) callback.onLocation(existing);
 
-        Location existing = getBestLocation();
-        if (existing != null) {
-            callback.onLocation(existing);
+        if (tracking) return;
+        boolean registered = false;
+        registered |= registerProvider(LocationManager.GPS_PROVIDER);
+        registered |= registerProvider(LocationManager.NETWORK_PROVIDER);
+        tracking = registered;
+        if (!registered && existing == null) {
+            callback.onUnavailable("กรุณาเปิดตำแหน่งในเครื่อง");
+        } else if (existing == null) {
+            callback.onUnavailable("กำลังค้นหาตำแหน่ง");
         }
+    }
 
-        String provider = chooseProvider();
-        if (provider == null) {
-            if (existing == null) {
-                callback.onUnavailable("ปิดในเครื่อง");
-            }
-            return;
+    public void stopTracking() {
+        if (tracking && locationManager != null) {
+            try { locationManager.removeUpdates(trackingListener); }
+            catch (Exception ignored) { }
         }
+        tracking = false;
+        listenerCallback = null;
+    }
 
+    private boolean registerProvider(String provider) {
+        if (locationManager == null) return false;
         try {
-            locationManager.requestSingleUpdate(
-                    provider,
-                    new LocationListener() {
-                        @Override
-                        public void onLocationChanged(@NonNull Location location) {
-                            consider(location);
-                            Location best = bestLocation != null ? bestLocation : location;
-                            callback.onLocation(best);
-                        }
-
-                        @Override
-                        public void onProviderDisabled(@NonNull String provider) {
-                            if (bestLocation == null) {
-                                callback.onUnavailable("ปิดในเครื่อง");
-                            }
-                        }
-
-                        @Override
-                        public void onProviderEnabled(@NonNull String provider) {
-                        }
-
-                        @Override
-                        public void onStatusChanged(String provider, int status, Bundle extras) {
-                        }
-                    },
-                    Looper.getMainLooper()
-            );
-        } catch (SecurityException e) {
-            callback.onUnavailable("ไม่มีสิทธิ์");
-        } catch (IllegalArgumentException e) {
-            if (existing == null) {
-                callback.onUnavailable("ไม่พบผู้ให้บริการตำแหน่ง");
-            }
+            if (!locationManager.isProviderEnabled(provider)) return false;
+            locationManager.requestLocationUpdates(provider,
+                    1000L, 1f, trackingListener, Looper.getMainLooper());
+            return true;
+        } catch (SecurityException | IllegalArgumentException e) {
+            return false;
         }
     }
 
     private boolean hasPermission() {
         return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED
+                    == PackageManager.PERMISSION_GRANTED
                 || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED;
+                    == PackageManager.PERMISSION_GRANTED;
     }
 
-    private String chooseProvider() {
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                return LocationManager.GPS_PROVIDER;
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                return LocationManager.NETWORK_PROVIDER;
-            }
-        } catch (Exception ignored) {
-        }
-
-        return null;
-    }
-
+    @Nullable
     private Location safeLastKnown(String provider) {
         try {
-            if (!hasPermission() || locationManager == null) return null;
+            if (!hasPermission() || locationManager == null
+                    || !locationManager.isProviderEnabled(provider)) return null;
             return locationManager.getLastKnownLocation(provider);
         } catch (SecurityException | IllegalArgumentException e) {
             return null;
         }
     }
 
-    private void consider(Location candidate) {
-        if (candidate == null) return;
+    private synchronized void consider(@Nullable Location candidate) {
+        if (candidate == null || candidate.getTime() <= 0L
+                || Double.isNaN(candidate.getLatitude())
+                || Double.isNaN(candidate.getLongitude())
+                || candidate.getLatitude() < -90 || candidate.getLatitude() > 90
+                || candidate.getLongitude() < -180 || candidate.getLongitude() > 180) return;
         if (bestLocation == null || isBetter(candidate, bestLocation)) {
             bestLocation = new Location(candidate);
         }
     }
 
-    private boolean isBetter(Location candidate, Location current) {
-        long timeDelta = candidate.getTime() - current.getTime();
-
-        if (timeDelta > 120_000L) return true;
-        if (timeDelta < -120_000L) return false;
+    private static boolean isBetter(Location candidate, Location current) {
+        if (isStale(current) && !isStale(candidate)) return true;
+        long difference = candidate.getTime() - current.getTime();
+        if (difference > 120_000L) return true;
+        if (difference < -120_000L) return false;
 
         float candidateAccuracy = candidate.hasAccuracy()
-                ? candidate.getAccuracy()
-                : Float.MAX_VALUE;
+                ? candidate.getAccuracy() : Float.MAX_VALUE;
         float currentAccuracy = current.hasAccuracy()
-                ? current.getAccuracy()
-                : Float.MAX_VALUE;
-
-        if (timeDelta > 0 && candidateAccuracy <= currentAccuracy + 100f) {
-            return true;
-        }
+                ? current.getAccuracy() : Float.MAX_VALUE;
+        if (difference > 0 && candidateAccuracy <= currentAccuracy + 100f) return true;
         return candidateAccuracy < currentAccuracy;
+    }
+
+    @Nullable private static Location copy(@Nullable Location location) {
+        return location == null ? null : new Location(location);
     }
 }
