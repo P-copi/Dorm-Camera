@@ -55,7 +55,7 @@ public final class ToolsActivity extends AppCompatActivity {
         navigator.setOnClickListener(v -> startActivity(new Intent(this, PhotoNavigatorV024Activity.class)));
         root.addView(navigator, buttonParams());
 
-        PressFeedbackButton importLine = makeButton("📥  รับไฟล์ภาพจาก LINE / เพื่อน");
+        PressFeedbackButton importLine = makeButton("📥  รับ GPS Link / ภาพจาก LINE / เพื่อน");
         importLine.setContentDescription("เลือกไฟล์ภาพ JPG ที่ดาวน์โหลดจาก LINE และอ่าน GPS เพื่อเปิดนำทาง");
         importLine.setOnClickListener(v -> startActivity(new Intent(this, ReceiveShareActivity.class)));
         root.addView(importLine, buttonParams());
