@@ -345,7 +345,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         TextView note = new TextView(this);
         note.setText("ติ๊กได้หลายรายการ • กดเริ่มแชร์ครั้งเดียว\n"
                 + "ระบบจะเตรียมไฟล์และตรวจสอบก่อนเปิด LINE\n"
-                + "ไฟล์ GPS ส่งเป็น ZIP เพื่อรักษา EXIF ทุกไบต์");
+                + "ไฟล์ GPS ส่งเป็น ZIP โดยตรวจพิกัด GPS ก่อนส่ง");
         note.setTextColor(0xFFB9BBC2);
         note.setTextSize(14f);
         note.setLineSpacing(0f, 1.15f);
@@ -408,7 +408,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                     }
                     if (useOriginal) {
                         gpsZipUri = ShareGpsArchive.createGpsZip(
-                                this, item.uri, item.name);
+                                this, item.uri, item.name, item.lat, item.lon);
                     }
                 } catch (Exception e) {
                     error = messageOf(e);
@@ -451,7 +451,8 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                     result.append("✗ JPEG ไม่มี GPS: ").append(messageOf(e)).append("\n");
                 }
                 try {
-                    Uri zip = ShareGpsArchive.createGpsZip(this, item.uri, item.name);
+                    Uri zip = ShareGpsArchive.createGpsZip(this, item.uri, item.name,
+                            item.lat, item.lon);
                     ShareToDownloads.save(this, zip, base + stamp + "_GPS.zip", "application/zip");
                     result.append("✓ ZIP รักษา GPS: บันทึกแล้ว\n");
                 } catch (Exception e) {
