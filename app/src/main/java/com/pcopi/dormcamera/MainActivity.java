@@ -8,10 +8,14 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.media.MediaActionSound;
 import android.media.MediaScannerConnection;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.provider.MediaStore;
 import android.util.Rational;
 import android.view.MotionEvent;
@@ -50,6 +54,7 @@ import androidx.camera.video.VideoRecordEvent;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.annotation.Nullable;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -106,6 +111,9 @@ public class MainActivity extends AppCompatActivity {
     private LocationHelper locationHelper;
     private String gpsStatus = "GPS: กำลังตรวจสอบ";
     private Location currentCaptureLocation;
+    private final Handler gpsWaitHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Runnable pendingGpsCheck;
+    private boolean waitingForGps;
     private FolderStore folderStore;
     private int selectedFlashMode = ImageCapture.FLASH_MODE_AUTO;
     private SharedPreferences cameraPreferences;
@@ -294,12 +302,16 @@ public class MainActivity extends AppCompatActivity {
 
         gpsStatus = "GPS: กำลังหาพิกัด";
         updateCameraStatus();
-        locationHelper.refresh(new LocationHelper.Callback() {
+        locationHelper.startTracking(new LocationHelper.Callback() {
             @Override
             public void onLocation(@NonNull Location location) {
-                gpsStatus = location.hasAccuracy()
-                        ? String.format(Locale.US, "GPS: พร้อม ±%.0f ม.", location.getAccuracy())
-                        : "GPS: พร้อม";
+                if (LocationHelper.isStale(location)) {
+                    gpsStatus = "GPS: ตำแหน่งเก่า กำลังค้นหาใหม่";
+                } else {
+                    gpsStatus = location.hasAccuracy()
+                            ? String.format(Locale.US, "GPS: พร้อม ±%.0f ม.", location.getAccuracy())
+                            : "GPS: พร้อม";
+                }
                 updateCameraStatus();
             }
 
@@ -572,70 +584,157 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "กล้องยังไม่พร้อม", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
-        String fileName = "IMG_" + stamp + ".jpg";
-        String folder = folderStore.getCurrentFolder();
-        String roomLabel = FolderStore.displayName(folder);
-        String relativePath = FolderStore.pictureRelativePath(folder);
-        String displayPath = relativePath.substring(0, relativePath.length() - 1);
-
-        currentCaptureLocation = prepareLocationForCapture();
-        ImageCapture.Metadata metadata = new ImageCapture.Metadata();
-        metadata.setLocation(currentCaptureLocation);
-        metadata.setReversedHorizontal(lensFacing == CameraSelector.LENS_FACING_FRONT);
-
-        final File legacyPhotoFile;
-        ImageCapture.OutputFileOptions options;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            legacyPhotoFile = null;
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
-            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-            values.put(MediaStore.Images.Media.RELATIVE_PATH, relativePath);
-            options = new ImageCapture.OutputFileOptions.Builder(
-                    getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
-            ).setMetadata(metadata).build();
-        } else {
-            File dormDir = FolderStore.legacyPictureDir(folder);
-            if (!dormDir.exists() && !dormDir.mkdirs()) {
-                showError("สร้างโฟลเดอร์ภาพไม่สำเร็จ");
-                return;
-            }
-            legacyPhotoFile = new File(dormDir, fileName);
-            options = new ImageCapture.OutputFileOptions.Builder(legacyPhotoFile).setMetadata(metadata).build();
+        if (!StorageGuard.checkBeforePhoto(this)) return;
+        // Never silently produce a location-less photo: acquire a fresh fix first.
+        if (!ensureFreshGpsForCapture(false)) return;
+        final Location photoFix = prepareLocationForCapture();
+        if (photoFix == null) {
+            waitForGps(false);
+            return;
         }
 
-        if (previewView.getDisplay() != null) imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
-        boolean hasGps = currentCaptureLocation != null;
-        statusText.setText("กำลังบันทึกภาพ → " + roomLabel + (hasGps ? "  •  GPS ✓" : "  •  ไม่มี GPS"));
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
+        final String fileName = "IMG_" + stamp + ".jpg";
+        final String folder = folderStore.getCurrentFolder();
+        final String roomLabel = FolderStore.displayName(folder);
+        final String relativePath = FolderStore.pictureRelativePath(folder);
+        final File legacyFolder = FolderStore.legacyPictureDir(folder);
+
+        // Capture privately so EXIF can be checked without Android MediaStore GPS redaction.
+        final File temporary;
+        try {
+            temporary = File.createTempFile("dorm_capture_", ".jpg", getCacheDir());
+        } catch (Exception ex) {
+            showError("เตรียมไฟล์ภาพ GPS ไม่สำเร็จ: " + ex.getMessage());
+            return;
+        }
+        ImageCapture.Metadata metadata = new ImageCapture.Metadata();
+        metadata.setLocation(photoFix);
+        metadata.setReversedHorizontal(lensFacing == CameraSelector.LENS_FACING_FRONT);
+        ImageCapture.OutputFileOptions options = new ImageCapture.OutputFileOptions.Builder(temporary)
+                .setMetadata(metadata).build();
+        if (previewView.getDisplay() != null) {
+            imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
+        }
+        statusText.setText("กำลังถ่ายภาพและตรวจ GPS → " + roomLabel);
         captureButton.setEnabled(false);
         playShutterSoundIfEnabled();
 
-        imageCapture.takePicture(options, ContextCompat.getMainExecutor(this), new ImageCapture.OnImageSavedCallback() {
-            @Override
-            public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                captureButton.setEnabled(true);
-                if (legacyPhotoFile != null) {
-                    MediaScannerConnection.scanFile(
-                            MainActivity.this,
-                            new String[]{legacyPhotoFile.getAbsolutePath()},
-                            new String[]{"image/jpeg"},
-                            null
-                    );
+        try {
+            imageCapture.takePicture(options, ContextCompat.getMainExecutor(this),
+                    new ImageCapture.OnImageSavedCallback() {
+                @Override
+                public void onImageSaved(@NonNull ImageCapture.OutputFileResults result) {
+                    statusText.setText("กำลังยืนยัน GPS ในภาพก่อนบันทึก...");
+                    new Thread(() -> {
+                        CapturePhotoSaver.Result published = null;
+                        String error = null;
+                        try {
+                            published = CapturePhotoSaver.publishVerified(MainActivity.this,
+                                    temporary, fileName, relativePath, legacyFolder, photoFix);
+                        } catch (Exception ex) {
+                            error = ex.getMessage() == null ? ex.getClass().getSimpleName()
+                                    : ex.getMessage();
+                        } finally {
+                            if (error == null) temporary.delete();
+                            // Preserve the private JPEG if publishing failed, instead of silently losing it.
+                        }
+                        CapturePhotoSaver.Result saved = published;
+                        String failure = error;
+                        runOnUiThread(() -> {
+                            captureButton.setEnabled(true);
+                            if (saved == null) {
+                                showError("ตรวจหรือบันทึก GPS ไม่ผ่าน: " + failure
+                                        + " • ไม่ได้บันทึกภาพที่ไม่มี GPS ลงคลัง");
+                                return;
+                            }
+                            statusText.setText("บันทึกภาพพร้อม GPS แล้ว ✓");
+                            showSaveBanner("ภาพพร้อม GPS ✓", roomLabel);
+                            if (latestMediaView != null) {
+                                latestMediaView.postDelayed(latestMediaView::refresh, 450L);
+                            }
+                            statusText.postDelayed(MainActivity.this::updateCameraStatus, 1800L);
+                        });
+                    }, "dorm-capture-verify-gps").start();
                 }
-                statusText.setText("บันทึกภาพแล้ว ✓");
-                showSaveBanner("บันทึกภาพแล้ว", roomLabel);
-                if (latestMediaView != null) latestMediaView.postDelayed(latestMediaView::refresh, 450L);
-                statusText.postDelayed(MainActivity.this::updateCameraStatus, 1500L);
-            }
 
-            @Override
-            public void onError(@NonNull ImageCaptureException exception) {
+                @Override
+                public void onError(@NonNull ImageCaptureException exception) {
+                    captureButton.setEnabled(true);
+                    temporary.delete();
+                    showError("ถ่ายภาพไม่สำเร็จ: " + exception.getMessage());
+                }
+            });
+        } catch (RuntimeException ex) {
+            captureButton.setEnabled(true);
+            temporary.delete();
+            showError("ถ่ายภาพ GPS ไม่สำเร็จ: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Preflight both photo and video capture. A missing/stale GPS fix must
+     * never become a silent success: wait briefly or offer Settings/Retry.
+     */
+    private boolean ensureFreshGpsForCapture(boolean video) {
+        if (prepareLocationForCapture() != null) return true;
+        waitForGps(video);
+        return false;
+    }
+
+    private void waitForGps(boolean video) {
+        if (waitingForGps) return;
+        if (!hasLocationPermission()) {
+            startLocationSetup();
+            Toast.makeText(this, "ต้องอนุญาตตำแหน่ง เพื่อถ่ายภาพหรือวิดีโอพร้อม GPS",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        waitingForGps = true;
+        captureButton.setEnabled(false);
+        videoButton.setEnabled(false);
+        statusText.setText("กำลังค้นหาพิกัด GPS ก่อน" + (video ? "ถ่ายวิดีโอ" : "ถ่ายภาพ") + "...");
+        refreshLocation();
+        final long deadline = SystemClock.elapsedRealtime() + 12_000L;
+        pendingGpsCheck = new Runnable() {
+            @Override public void run() {
+                if (!waitingForGps) return;
+                if (prepareLocationForCapture() != null) {
+                    waitingForGps = false;
+                    pendingGpsCheck = null;
+                    captureButton.setEnabled(true);
+                    videoButton.setEnabled(true);
+                    if (video) startVideoRecording(); else takePhoto();
+                    return;
+                }
+                if (SystemClock.elapsedRealtime() < deadline) {
+                    gpsWaitHandler.postDelayed(this, 500L);
+                    return;
+                }
+                waitingForGps = false;
+                pendingGpsCheck = null;
                 captureButton.setEnabled(true);
-                showError("ถ่ายภาพไม่สำเร็จ: " + exception.getMessage());
+                videoButton.setEnabled(true);
+                gpsStatus = "GPS: ยังไม่พบพิกัดใหม่";
+                updateCameraStatus();
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("ยังไม่พบ GPS สำหรับภาพ/วิดีโอ")
+                        .setMessage("Dorm Camera จะไม่บันทึกภาพที่ไม่มี GPS โดยไม่แจ้งให้ทราบ\n"
+                                + "กรุณาเปิดตำแหน่งและรอพิกัด หรือไปบริเวณที่รับ GPS ได้")
+                        .setPositiveButton("ลองอีกครั้ง", (dialog, which) -> waitForGps(video))
+                        .setNeutralButton("ตั้งค่าตำแหน่ง", (dialog, which) -> {
+                            try {
+                                startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                            } catch (Exception ex) {
+                                Toast.makeText(MainActivity.this,
+                                        "เปิดตั้งค่าตำแหน่งไม่ได้", Toast.LENGTH_LONG).show();
+                            }
+                        })
+                        .setNegativeButton("ยกเลิก", null)
+                        .show();
             }
-        });
+        };
+        gpsWaitHandler.post(pendingGpsCheck);
     }
 
     private void toggleVideoRecording() {
@@ -659,6 +758,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void startVideoRecording() {
         if (videoCapture == null || activeRecording != null) return;
+        if (!StorageGuard.checkBeforeVideo(this)) return;
+        if (!ensureFreshGpsForCapture(true)) return;
 
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
         String fileName = "VID_" + stamp + ".mp4";
@@ -1132,9 +1233,19 @@ public class MainActivity extends AppCompatActivity {
         updateCameraStatus();
         refreshLatestMedia();
         if (locationHelper != null && hasLocationPermission()) {
-            Location location = locationHelper.getBestLocation();
-            if (location == null || LocationHelper.isStale(location)) refreshLocation();
+            refreshLocation();
         }
+    }
+
+    @Override
+    protected void onPause() {
+        if (pendingGpsCheck != null) {
+            gpsWaitHandler.removeCallbacks(pendingGpsCheck);
+            pendingGpsCheck = null;
+        }
+        waitingForGps = false;
+        if (locationHelper != null) locationHelper.stopTracking();
+        super.onPause();
     }
 
     @Override
