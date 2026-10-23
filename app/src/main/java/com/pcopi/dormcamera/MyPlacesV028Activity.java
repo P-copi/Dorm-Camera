@@ -3,6 +3,8 @@ package com.pcopi.dormcamera;
 import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Intent;
@@ -395,7 +397,77 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
         linkParams.setMargins(0, dp(7), 0, 0);
         card.addView(link, linkParams);
+        PressFeedbackButton photoLink = makeButton("🖼 ส่งภาพ + ลิงก์นำทาง (ทดลอง ไม่ใช้ ZIP)", 13f);
+        photoLink.setOnClickListener(v -> shareVisiblePhotoWithGpsLink(item));
+        LinearLayout.LayoutParams photoLinkParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        photoLinkParams.setMargins(0, dp(7), 0, 0);
+        card.addView(photoLink, photoLinkParams);
         return card;
+    }
+
+    /**
+     * Trial for LINE image + navigation text in one Android share.
+     * Some LINE versions can consume EXTRA_TEXT with JPEG; some only accept the
+     * image. The text is also copied so it can be pasted into LINE's message box.
+     */
+    private void shareVisiblePhotoWithGpsLink(PlaceItem item) {
+        final String gpsMessage = SmartGpsLink.shareText(
+                friendlyName(item.name), item.lat, item.lon);
+        new AlertDialog.Builder(this)
+                .setTitle("🖼 ส่งภาพพร้อมลิงก์นำทาง")
+                .setMessage("ส่งเป็นรูป JPEG ที่เห็นได้ในห้องแชต LINE ทันที "
+                        + "ไม่ส่ง ZIP และไม่แนบ GPS ไว้ในไฟล์รูป\\n\\n"
+                        + "แอปจะส่งลิงก์นำทางไปพร้อมกับรูป และสำรองลิงก์ไว้ในคลิปบอร์ด"
+                        + " หาก LINE มีช่องเขียนข้อความ ให้กดวางลิงก์ที่นั่นก่อนกดส่ง\\n\\n"
+                        + "LINE บางรุ่นอาจส่งเฉพาะภาพ จึงต้องตรวจที่ห้องแชตจริง")
+                .setPositiveButton("เตรียมรูปและแชร์", (d, which) -> {
+                    Toast.makeText(this, "กำลังเตรียมรูปภาพที่ไม่มี GPS...", Toast.LENGTH_SHORT).show();
+                    new Thread(() -> {
+                        Uri photo = null;
+                        String error = null;
+                        try {
+                            photo = ShareImageSanitizer.createGpsFreeShareUri(
+                                    this, item.uri, item.name);
+                        } catch (Exception e) {
+                            error = messageOf(e);
+                        }
+                        Uri readyPhoto = photo;
+                        String failure = error;
+                        runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            if (readyPhoto == null) {
+                                showPreparationError(failure == null
+                                        ? "เตรียม JPEG ไม่สำเร็จ" : failure);
+                                return;
+                            }
+                            try {
+                                ClipboardManager clipboard = (ClipboardManager)
+                                        getSystemService(Context.CLIPBOARD_SERVICE);
+                                if (clipboard != null) {
+                                    clipboard.setPrimaryClip(ClipData.newPlainText(
+                                            "Dorm Camera GPS Link", gpsMessage));
+                                }
+                            } catch (Exception ignored) {
+                                // Clipboard is a convenience, not a requirement.
+                            }
+                            clearShareQueueState();
+                            Intent share = new Intent(Intent.ACTION_SEND);
+                            share.setType("image/jpeg");
+                            share.putExtra(Intent.EXTRA_STREAM, readyPhoto);
+                            share.putExtra(Intent.EXTRA_TEXT, gpsMessage);
+                            share.putExtra(Intent.EXTRA_SUBJECT, friendlyName(item.name));
+                            share.setClipData(ClipData.newUri(getContentResolver(),
+                                    "DormCamera_Photo_With_Map_Link", readyPhoto));
+                            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            Toast.makeText(this, "ลิงก์คัดลอกแล้ว • ถ้า LINE มีช่องข้อความ ให้กดวางก่อนส่ง",
+                                    Toast.LENGTH_LONG).show();
+                            launchShareIntent(share, "ทดลองส่ง JPEG พร้อมลิงก์ Google Maps");
+                        });
+                    }, "dorm-smart-gps-photo-text-share").start();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
     }
 
     /** Text-only GPS locations saved from LINE live alongside photo-based places. */
@@ -479,8 +551,9 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.setPadding(dp(18), dp(4), dp(18), dp(4));
 
         TextView note = new TextView(this);
-        note.setText("เลือกส่งลิงก์อย่างเดียวได้ ไม่ต้องใช้รูปหรือ ZIP\n"
-                + "เพื่อนที่ไม่มี Dorm Camera เปิด Google Maps ได้ทันที");
+        note.setText("ส่งลิงก์อย่างเดียวได้เหมือนเดิม • ถ้าเลือก 1+3 ระบบจะทดลองส่ง"
+                + "รูป JPEG พร้อมข้อความนำทาง ไม่ใช่ ZIP\n"
+                + "LINE บางรุ่นอาจไม่รับข้อความพร้อมรูป ต้องตรวจในห้องแชต");
         note.setTextColor(0xFFB9BBC2);
         note.setTextSize(13f);
         note.setLineSpacing(0f, 1.1f);
@@ -493,6 +566,13 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(location, checkParams());
         content.addView(original, checkParams());
         content.addView(visible, checkParams());
+
+        PressFeedbackButton photoAndLink = makeButton(
+                "🖼 ส่ง 1+3 รูปพร้อมลิงก์ (ไม่ต้อง ZIP)", 13f);
+        LinearLayout.LayoutParams photoAndLinkParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        photoAndLinkParams.setMargins(0, dp(8), 0, dp(7));
+        content.addView(photoAndLink, photoAndLinkParams);
 
         PressFeedbackButton separate = makeButton("↪️ ส่งแยกทีละรายการ (เลือกผู้รับหลายครั้ง)", 12f);
         LinearLayout.LayoutParams separateParams = new LinearLayout.LayoutParams(
@@ -515,11 +595,16 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(privacy);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Smart Share • ส่งครบครั้งเดียว")
+                .setTitle("Smart Share • ส่งภาพและนำทาง")
                 .setView(content)
                 .setPositiveButton("📦 ส่งรวมครั้งเดียว", null)
                 .setNegativeButton("ยกเลิก", null)
                 .create();
+
+        photoAndLink.setOnClickListener(v -> {
+            dialog.dismiss();
+            shareVisiblePhotoWithGpsLink(item);
+        });
 
         dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
                 .setOnClickListener(v -> {
@@ -622,6 +707,11 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
             clearShareQueueState();
             dialog.dismiss();
             shareLocationText(item);
+            return;
+        }
+        if (withLocation && withVisible && !withGps) {
+            dialog.dismiss();
+            shareVisiblePhotoWithGpsLink(item);
             return;
         }
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
