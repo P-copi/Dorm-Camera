@@ -115,7 +115,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.11 • Smart Share ภาพ JPEG / GPS ZIP");
+        subtitle.setText("V0.2.12 • Smart Share ภาพ JPEG / GPS ZIP");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
@@ -343,134 +343,214 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.setPadding(dp(18), dp(4), dp(18), dp(4));
 
         TextView note = new TextView(this);
-        note.setText("ติ๊กได้หลายรายการ • กดเริ่มแชร์ครั้งเดียว\n"
-                + "ระบบจะเตรียมไฟล์และตรวจสอบก่อนเปิด LINE\n"
-                + "ไฟล์ GPS ส่งเป็น ZIP โดยตรวจพิกัด GPS ก่อนส่ง");
+        note.setText("เลือกได้หลายรายการ • ส่งรวม ZIP เพื่อเลือกผู้รับเพียงครั้งเดียว\n"
+                + "ภาพปกติเปิดดูหลังแตก ZIP • ภาพ GPS นำทางผ่าน Dorm Camera ได้");
         note.setTextColor(0xFFB9BBC2);
-        note.setTextSize(14f);
-        note.setLineSpacing(0f, 1.15f);
-        note.setPadding(0, 0, 0, dp(10));
+        note.setTextSize(13f);
+        note.setLineSpacing(0f, 1.1f);
+        note.setPadding(0, 0, 0, dp(8));
         content.addView(note);
 
-        CheckBox location = checkBox("📍 แชร์ตำแหน่ง + ลิงก์แผนที่", true);
-        CheckBox original = checkBox("📎 แชร์ภาพ GPS เป็นไฟล์ ZIP (รักษา EXIF)", true);
-        CheckBox visible = checkBox("🖼 ภาพปกติ (เห็นภาพ • ไม่มี GPS)", true);
+        CheckBox location = checkBox("📍 ตำแหน่ง + ลิงก์แผนที่", true);
+        CheckBox original = checkBox("📎 ภาพต้นฉบับพร้อม GPS", true);
+        CheckBox visible = checkBox("🖼 ภาพปกติ ไม่มี GPS", true);
         content.addView(location, checkParams());
         content.addView(original, checkParams());
         content.addView(visible, checkParams());
 
-        PressFeedbackButton saveBackup = makeButton("💾 สำรอง JPEG + GPS ZIP ใน Downloads", 13f);
+        PressFeedbackButton separate = makeButton("↪️ ส่งแยกทีละรายการ (เลือกผู้รับหลายครั้ง)", 12f);
+        LinearLayout.LayoutParams separateParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        separateParams.setMargins(0, dp(7), 0, dp(4));
+        content.addView(separate, separateParams);
+
+        PressFeedbackButton saveBackup = makeButton("💾 บันทึก ZIP รวมไว้ใน Downloads", 13f);
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-        saveParams.setMargins(0, dp(8), 0, dp(4));
+        saveParams.setMargins(0, dp(4), 0, dp(4));
         content.addView(saveBackup, saveParams);
 
         TextView privacy = new TextView(this);
-        privacy.setText("หาก LINE แชร์ตรงไม่ได้ ให้บันทึกไฟล์แล้วเข้า LINE → + → ไฟล์\nLINE ยังต้องให้เลือกผู้รับและยืนยันการส่ง");
+        privacy.setText("ส่งรวม: เพื่อนจะได้รับ ZIP หนึ่งไฟล์และแตกไฟล์เพื่อดูภาพ\n"
+                + "LINE ยังต้องให้เลือกผู้รับและยืนยันส่งหนึ่งครั้ง");
         privacy.setTextColor(0xFF8F929A);
         privacy.setTextSize(11f);
-        privacy.setPadding(0, dp(8), 0, 0);
+        privacy.setPadding(0, dp(6), 0, 0);
         content.addView(privacy);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Smart Share")
+                .setTitle("Smart Share • ส่งครบครั้งเดียว")
                 .setView(content)
-                .setPositiveButton("เริ่มแชร์", null)
+                .setPositiveButton("📦 ส่งรวมครั้งเดียว", null)
                 .setNegativeButton("ยกเลิก", null)
                 .create();
-        dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+
+        dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    boolean useLocation = location.isChecked();
+                    boolean useOriginal = original.isChecked();
+                    boolean useVisible = visible.isChecked();
+                    if (!useLocation && !useOriginal && !useVisible) {
+                        Toast.makeText(this, "กรุณาเลือกอย่างน้อย 1 รายการ",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    startOneShare(item, useLocation, useVisible, useOriginal, dialog);
+                }));
+
+        separate.setOnClickListener(v -> {
             boolean useLocation = location.isChecked();
             boolean useOriginal = original.isChecked();
             boolean useVisible = visible.isChecked();
             if (!useLocation && !useOriginal && !useVisible) {
-                Toast.makeText(this, "กรุณาเลือกอย่างน้อย 1 รายการ", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "กรุณาเลือกอย่างน้อย 1 รายการ",
+                        Toast.LENGTH_SHORT).show();
                 return;
             }
-
-            if (!useVisible && !useOriginal) {
-                preparedVisibleNoGpsUri = null;
-                preparedGpsZipUri = null;
-                dialog.dismiss();
-                beginShareQueue(item, useLocation, false, false);
-                return;
-            }
-
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("กำลังเตรียมไฟล์...");
+            separate.setEnabled(false);
+            separate.setText("กำลังเตรียมไฟล์...");
             new Thread(() -> {
-                Uri cleanUri = null;
-                Uri gpsZipUri = null;
+                Uri clean = null;
+                Uri gpsZip = null;
                 String error = null;
                 try {
-                    if (useVisible) {
-                        cleanUri = ShareImageSanitizer.createGpsFreeShareUri(
-                                this, item.uri, item.name);
-                    }
-                    if (useOriginal) {
-                        gpsZipUri = ShareGpsArchive.createGpsZip(
-                                this, item.uri, item.name, item.lat, item.lon);
-                    }
-                } catch (Exception e) {
-                    error = messageOf(e);
-                }
-                Uri finalClean = cleanUri;
-                Uri finalZip = gpsZipUri;
-                String finalError = error;
+                    if (useVisible) clean = ShareImageSanitizer.createGpsFreeShareUri(
+                            this, item.uri, item.name);
+                    if (useOriginal) gpsZip = ShareGpsArchive.createGpsZip(
+                            this, item.uri, item.name, item.lat, item.lon);
+                } catch (Exception e) { error = messageOf(e); }
+                Uri preparedClean = clean;
+                Uri preparedGps = gpsZip;
+                String prepareError = error;
                 runOnUiThread(() -> {
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("เริ่มแชร์");
-                    if (finalError != null) {
-                        new AlertDialog.Builder(this)
-                                .setTitle("เตรียมไฟล์แชร์ไม่สำเร็จ")
-                                .setMessage(finalError
-                                        + "\n\nลองติ๊กเฉพาะภาพปกติ หรือเฉพาะภาพ GPS "
-                                        + "เพื่อดูว่าขั้นตอนไหนติดขัด")
-                                .setPositiveButton("ตกลง", null)
-                                .show();
+                    separate.setEnabled(true);
+                    separate.setText("↪️ ส่งแยกทีละรายการ (เลือกผู้รับหลายครั้ง)");
+                    if (prepareError != null) {
+                        showPreparationError(prepareError);
                         return;
                     }
-                    preparedVisibleNoGpsUri = finalClean;
-                    preparedGpsZipUri = finalZip;
+                    preparedVisibleNoGpsUri = preparedClean;
+                    preparedGpsZipUri = preparedGps;
                     dialog.dismiss();
                     beginShareQueue(item, useLocation, useVisible, useOriginal);
                 });
-            }, "smart-share-preflight-v0211").start();
-        }));
+            }, "smart-share-separate-v0212").start();
+        });
+
         saveBackup.setOnClickListener(v -> {
+            boolean withLocation = location.isChecked();
+            boolean withVisible = visible.isChecked();
+            boolean withGps = original.isChecked();
+            int count = (withLocation ? 1 : 0)
+                    + (withVisible ? 1 : 0) + (withGps ? 1 : 0);
+            if (count < 2) {
+                Toast.makeText(this, "สำหรับ ZIP รวม กรุณาเลือกอย่างน้อย 2 รายการ",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
             saveBackup.setEnabled(false);
-            saveBackup.setText("กำลังเตรียมไฟล์สำรอง...");
+            saveBackup.setText("กำลังบันทึก ZIP รวม...");
             new Thread(() -> {
-                String base = ShareToDownloads.cleanName(friendlyName(item.name));
-                String stamp = "_" + System.currentTimeMillis();
-                StringBuilder result = new StringBuilder();
+                String message;
                 try {
-                    Uri image = ShareImageSanitizer.createGpsFreeShareUri(this, item.uri, item.name);
-                    ShareToDownloads.save(this, image, base + stamp + "_NoGPS.jpg", "image/jpeg");
-                    result.append("✓ JPEG ไม่มี GPS: บันทึกแล้ว\n");
+                    Uri bundle = ShareBundleArchive.create(this, item.uri, item.name,
+                            item.lat, item.lon, withLocation, withVisible, withGps);
+                    String base = ShareToDownloads.cleanName(friendlyName(item.name));
+                    ShareToDownloads.save(this, bundle,
+                            base + "_Bundle_" + System.currentTimeMillis() + ".zip",
+                            "application/zip");
+                    message = "บันทึก ZIP รวม " + count + " รายการสำเร็จ\n"
+                            + "เปิด My Files → Downloads → DormCamera";
                 } catch (Exception e) {
-                    result.append("✗ JPEG ไม่มี GPS: ").append(messageOf(e)).append("\n");
+                    message = "บันทึกไม่สำเร็จ: " + messageOf(e);
                 }
-                try {
-                    Uri zip = ShareGpsArchive.createGpsZip(this, item.uri, item.name,
-                            item.lat, item.lon);
-                    ShareToDownloads.save(this, zip, base + stamp + "_GPS.zip", "application/zip");
-                    result.append("✓ ZIP รักษา GPS: บันทึกแล้ว\n");
-                } catch (Exception e) {
-                    result.append("✗ ZIP รักษา GPS: ").append(messageOf(e)).append("\n");
-                }
-                String summary = result.toString();
+                String result = message;
                 runOnUiThread(() -> {
                     saveBackup.setEnabled(true);
-                    saveBackup.setText("💾 สำรอง JPEG + GPS ZIP ใน Downloads");
+                    saveBackup.setText("💾 บันทึก ZIP รวมไว้ใน Downloads");
                     new AlertDialog.Builder(this)
-                            .setTitle("บันทึกไฟล์สำหรับ LINE")
-                            .setMessage(summary + "\nดูไฟล์ได้ที่ My Files → Downloads → DormCamera"
-                                    + "\nแล้วเปิด LINE → + → ไฟล์ เพื่อส่งออก")
+                            .setTitle("บันทึกสำหรับ LINE")
+                            .setMessage(result)
                             .setPositiveButton("ตกลง", null).show();
                 });
-            }, "save-dorm-share-fallback").start();
+            }, "smart-share-save-bundle-v0212").start();
         });
         dialog.show();
+    }
+
+    private void startOneShare(PlaceItem item, boolean withLocation,
+            boolean withVisible, boolean withGps, AlertDialog dialog) {
+        int count = (withLocation ? 1 : 0) + (withVisible ? 1 : 0)
+                + (withGps ? 1 : 0);
+        if (count == 1 && withLocation) {
+            clearShareQueueState();
+            dialog.dismiss();
+            shareLocationText(item);
+            return;
+        }
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText("กำลังเตรียมไฟล์...");
+        new Thread(() -> {
+            Uri result = null;
+            String error = null;
+            String mime = "application/zip";
+            try {
+                if (count >= 2) {
+                    result = ShareBundleArchive.create(this, item.uri, item.name,
+                            item.lat, item.lon, withLocation, withVisible, withGps);
+                } else if (withGps) {
+                    result = ShareGpsArchive.createGpsZip(
+                            this, item.uri, item.name, item.lat, item.lon);
+                } else {
+                    result = ShareImageSanitizer.createGpsFreeShareUri(
+                            this, item.uri, item.name);
+                    mime = "image/jpeg";
+                }
+            } catch (Exception e) { error = messageOf(e); }
+            Uri file = result;
+            String actualMime = mime;
+            String failure = error;
+            runOnUiThread(() -> {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                        .setText("📦 ส่งรวมครั้งเดียว");
+                if (file == null) {
+                    showPreparationError(failure == null
+                            ? "เตรียมไฟล์แชร์ไม่สำเร็จ" : failure);
+                    return;
+                }
+                clearShareQueueState();
+                dialog.dismiss();
+                Intent share = new Intent(Intent.ACTION_SEND);
+                share.setType(actualMime);
+                share.putExtra(Intent.EXTRA_STREAM, file);
+                share.setClipData(ClipData.newUri(getContentResolver(),
+                        "DormCamera", file));
+                share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                share.putExtra(Intent.EXTRA_TITLE, friendlyName(item.name)
+                        + (actualMime.equals("application/zip") ? "_Bundle.zip" : "_NoGPS.jpg"));
+                launchShareIntent(share, count >= 2
+                        ? "ส่งครบ " + count + " รายการใน ZIP เดียว"
+                        : "แชร์ภาพที่เลือก");
+            });
+        }, "smart-share-one-v0212").start();
+    }
+
+    private void showPreparationError(String error) {
+        new AlertDialog.Builder(this)
+                .setTitle("เตรียมไฟล์แชร์ไม่สำเร็จ")
+                .setMessage(error + "\nลองส่งแต่ละรายการเพื่อตรวจปัญหาได้")
+                .setPositiveButton("ตกลง", null)
+                .show();
+    }
+
+    private void clearShareQueueState() {
+        shareQueue.clear();
+        shareQueueIndex = 0;
+        queuedShareItem = null;
+        preparedVisibleNoGpsUri = null;
+        preparedGpsZipUri = null;
+        waitingForShareReturn = false;
     }
 
     private void beginShareQueue(PlaceItem item, boolean useLocation, boolean useVisible, boolean useOriginal) {
