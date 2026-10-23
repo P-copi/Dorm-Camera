@@ -47,6 +47,9 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     private PressFeedbackButton addGpsButton;
     private PressFeedbackButton linkButton;
     private PressFeedbackButton chooseFileButton;
+    private PressFeedbackButton retryFileButton;
+    @Nullable private Uri lastIncomingUri;
+    private int receiveSequence;
 
     @Nullable private Uri sharedImageUri;
     @Nullable private String sharedLink;
@@ -84,7 +87,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         top.addView(heading, new LinearLayout.LayoutParams(0, dp(42), 1f));
         root.addView(top);
 
-        TextView hint = text("ตรวจ GPS แล้วเปิดแผนที่หรือนำทางได้ทันที", 12f, 0xFF8FC9A3);
+        TextView hint = text("รับ JPG / ZIP จาก LINE • คัดลอกก่อนตรวจ GPS", 12f, 0xFF8FC9A3);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(6), 0, dp(8));
         root.addView(hint);
@@ -137,12 +140,22 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         linkParams.setMargins(0, dp(8), 0, 0);
         root.addView(linkButton, linkParams);
 
-        chooseFileButton = button("📂 เลือกไฟล์ภาพที่บันทึกจาก LINE", 14f);
+        chooseFileButton = button("📂 เลือก JPG / ZIP จากเครื่อง (ไม่ผ่านการแชร์ LINE)", 13f);
         chooseFileButton.setOnClickListener(v -> pickDownloadedFile());
         LinearLayout.LayoutParams chooseParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
         chooseParams.setMargins(0, dp(8), 0, 0);
         root.addView(chooseFileButton, chooseParams);
+
+        retryFileButton = button("↻ ลองอ่านไฟล์เดิมอีกครั้ง", 13f);
+        retryFileButton.setOnClickListener(v -> {
+            if (lastIncomingUri != null) handleSharedImage(lastIncomingUri);
+        });
+        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        retryParams.setMargins(0, dp(6), 0, 0);
+        root.addView(retryFileButton, retryParams);
+        retryFileButton.setVisibility(View.GONE);
 
         setContentView(root);
         setCoordinateActions(false);
@@ -177,7 +190,24 @@ public final class ReceiveShareActivity extends AppCompatActivity {
             return;
         }
 
-        showUnsupported("ไม่พบไฟล์/พิกัดที่แชร์มา กดเลือกไฟล์ภาพจากเครื่องได้");
+        showReadyState();
+    }
+
+    private void showReadyState() {
+        ++receiveSequence;
+        lastIncomingUri = null;
+        retryFileButton.setVisibility(View.GONE);
+        sharedImageUri = null;
+        sharedLink = null;
+        hasCoordinate = false;
+        imageView.setVisibility(View.GONE);
+        titleText.setText("พร้อมรับไฟล์จาก LINE / Keep Memo");
+        statusText.setText("เลือก JPG หรือ ZIP ที่ดาวน์โหลดแล้ว");
+        detailText.setText("กดปุ่มเลือกไฟล์ด้านล่าง หรือเปิดแชร์เข้า Dorm Camera "
+                + "เมื่อ LINE อนุญาตให้ส่งไฟล์แล้ว");
+        addGpsButton.setVisibility(View.GONE);
+        linkButton.setVisibility(View.GONE);
+        setCoordinateActions(false);
     }
 
     @Nullable
@@ -238,101 +268,135 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * LINE may supply a temporary URI whose content is only available once its
+     * transfer/cache is ready. Never decode or inspect that remote URI on the UI
+     * thread: copy first, then analyze only our own app-owned snapshot.
+     */
     private void handleSharedImage(@NonNull Uri uri) {
-        if (isZipFile(uri)) {
-            receiveImageFromZip(uri);
-            return;
-        }
-        sharedImageUri = uri;
-        sharedLink = null;
-        imageView.setVisibility(View.VISIBLE);
-        imageView.setImageURI(null);
-        imageView.setImageURI(uri);
-        String name = displayName(uri);
-        titleText.setText(name);
-        statusText.setText("กำลังตรวจ GPS ในภาพ...");
-        String actualMime;
-        try { actualMime = getContentResolver().getType(uri); }
-        catch (Exception ignored) { actualMime = null; }
-        // Report how LINE/file manager labelled the attachment for diagnosis.
-        String formatNote = actualMime == null ? "ไม่ระบุ" : actualMime;
-        detailText.setText("ชนิดไฟล์: " + formatNote);
-        linkButton.setVisibility(View.GONE);
-        addGpsButton.setVisibility(View.GONE);
-        setCoordinateActions(false);
-
-        try (InputStream in = getContentResolver().openInputStream(uri)) {
-            if (in == null) throw new IOException("เปิดไฟล์ไม่ได้");
-            ExifInterface exif = new ExifInterface(in);
-            double[] ll = exif.getLatLong();
-            if (ll != null && ll.length >= 2 && valid(ll[0], ll[1])) {
-                latitude = ll[0];
-                longitude = ll[1];
-                hasCoordinate = true;
-                statusText.setText("✓ พบ GPS ในไฟล์นี้");
-                detailText.setText(String.format(Locale.US,
-                        "📍 %.7f, %.7f\nกด “นำทาง” ได้ทันที\nชนิดไฟล์: %s", latitude, longitude, formatNote));
-                setCoordinateActions(true);
-            } else {
-                hasCoordinate = false;
-                statusText.setText("ไม่พบ GPS ในภาพนี้");
-                detailText.setText("ถ้าเป็นภาพที่ส่งใน LINE แบบรูปภาพปกติ EXIF/GPS อาจถูกลบแล้ว\n"
-                        + "สามารถเลือกตำแหน่งจากแผนที่เพื่อสร้างสำเนาพร้อม GPS ได้\nชนิดไฟล์: " + formatNote);
-                addGpsButton.setVisibility(View.VISIBLE);
-            }
-        } catch (Exception e) {
-            hasCoordinate = false;
-            statusText.setText("อ่านข้อมูลภาพไม่สำเร็จ");
-            detailText.setText(messageOf(e));
-            addGpsButton.setVisibility(View.VISIBLE);
-        }
-    }
-
-    private boolean isZipFile(@NonNull Uri uri) {
-        String name = displayName(uri).toLowerCase(Locale.US);
-        if (name.endsWith(".zip")) return true;
-        try {
-            String mime = getContentResolver().getType(uri);
-            return "application/zip".equalsIgnoreCase(mime)
-                    || "application/x-zip-compressed".equalsIgnoreCase(mime);
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-
-    private void receiveImageFromZip(@NonNull Uri zipUri) {
+        lastIncomingUri = uri;
+        final int sequence = ++receiveSequence;
+        hasCoordinate = false;
         sharedImageUri = null;
         sharedLink = null;
-        imageView.setImageDrawable(null);
-        imageView.setVisibility(View.VISIBLE);
-        titleText.setText("กำลังเปิด ZIP ภาพพร้อม GPS");
-        statusText.setText("กำลังแยกไฟล์ภาพต้นฉบับ โดยไม่แก้ไข EXIF...");
-        detailText.setText("");
         setCoordinateActions(false);
         addGpsButton.setVisibility(View.GONE);
         linkButton.setVisibility(View.GONE);
+        retryFileButton.setVisibility(View.GONE);
+        imageView.setVisibility(View.GONE);
+        titleText.setText("รับไฟล์จาก LINE / เครื่อง");
+        statusText.setText("กำลังอ่านไฟล์ต้นทาง...");
+        detailText.setText("ระบบจะคัดลอกไฟล์เข้าพื้นที่ของ Dorm Camera ก่อนตรวจ GPS\n"
+                + "ถ้า LINE ยังไม่เปิดไฟล์ให้ใช้งาน ระบบจะลองใหม่แบบจำกัดครั้ง");
+
         new Thread(() -> {
-            Uri extracted = null;
-            String error = null;
-            try {
-                extracted = ShareGpsArchive.extractFirstImage(this, zipUri);
-            } catch (Exception e) {
-                error = messageOf(e);
+            IncomingFileCache.Result received = null;
+            Uri image = null;
+            double[] position = null;
+            Exception lastError = null;
+            boolean fromZip = false;
+            int completedAttempts = 0;
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                if (sequence != receiveSequence || Thread.currentThread().isInterrupted()) return;
+                final int currentAttempt = attempt;
+                runOnUiThread(() -> {
+                    if (sequence == receiveSequence && !isFinishing()) {
+                        statusText.setText("กำลังรับไฟล์ • ครั้งที่ " + currentAttempt + "/3");
+                    }
+                });
+                try {
+                    received = IncomingFileCache.snapshot(this, uri);
+                    if (!received.zip && received.originalName.toLowerCase(Locale.US)
+                            .endsWith(".zip")) {
+                        throw new IOException("ZIP ไม่สมบูรณ์หรือไฟล์ยังดาวน์โหลดไม่ครบ");
+                    }
+                    fromZip = received.zip;
+                    image = received.zip
+                            ? ShareGpsArchive.extractFirstImage(this, received.uri)
+                            : received.uri;
+                    try (InputStream input = getContentResolver().openInputStream(image)) {
+                        if (input == null) throw new IOException("เปิดภาพที่รับไว้ไม่ได้");
+                        position = new ExifInterface(input).getLatLong();
+                    }
+                    completedAttempts = attempt;
+                    lastError = null;
+                    break;
+                } catch (Exception ex) {
+                    lastError = ex;
+                    if (ex instanceof SecurityException || attempt == 3) break;
+                    try { Thread.sleep(attempt == 1 ? 500L : 1400L); }
+                    catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
             }
-            Uri result = extracted;
-            String message = error;
+
+            IncomingFileCache.Result finalReceived = received;
+            Uri finalImage = image;
+            double[] gps = position;
+            Exception failure = lastError;
+            boolean zip = fromZip;
+            int attempts = completedAttempts;
             runOnUiThread(() -> {
-                if (result == null) {
-                    showUnsupported("อ่านภาพใน ZIP ไม่สำเร็จ: "
-                            + (message == null ? "ไม่ทราบสาเหตุ" : message));
+                if (sequence != receiveSequence || isFinishing() || isDestroyed()) return;
+                if (failure != null || finalImage == null || finalReceived == null) {
+                    hasCoordinate = false;
+                    sharedImageUri = null;
+                    titleText.setText("LINE ส่งไฟล์มาแล้ว แต่เปิดอ่านไม่สำเร็จ");
+                    statusText.setText(failure instanceof SecurityException
+                            ? "ไม่มีสิทธิ์อ่านไฟล์ที่ LINE ส่งมา"
+                            : "ไฟล์ยังไม่พร้อม หรืออ่านข้อมูลไม่สำเร็จ");
+                    String kind = failure == null ? "ไม่ทราบ" : failure.getClass().getSimpleName();
+                    detailText.setText("ลองอ่านใหม่ได้ด้วยปุ่มด้านล่าง\n"
+                            + "หาก LINE ยังแจ้ง “ไม่สามารถแชร์ได้” ก่อนเปิดแอป ให้ลอง Keep Memo "
+                            + "หรือเลือกไฟล์ที่บันทึกในเครื่อง\n"
+                            + "รายละเอียด: " + kind + " • "
+                            + (failure == null ? "ไม่ทราบสาเหตุ" : messageOf(failure)));
+                    imageView.setVisibility(View.GONE);
+                    addGpsButton.setVisibility(View.GONE);
+                    retryFileButton.setVisibility(View.VISIBLE);
+                    setCoordinateActions(false);
+                    return;
+                }
+                sharedImageUri = finalImage;
+                sharedLink = null;
+                retryFileButton.setVisibility(View.GONE);
+                String label = finalReceived.originalName;
+                titleText.setText(label);
+                imageView.setVisibility(View.VISIBLE);
+                imageView.setImageURI(null);
+                imageView.setImageURI(finalImage);
+                String metadata = (zip ? "ไฟล์ ZIP → ภาพ GPS" : "ไฟล์ภาพ")
+                        + " • ขนาดต้นทาง "
+                        + String.format(Locale.US, "%.2f MB", finalReceived.bytes / 1048576.0)
+                        + " • อ่านสำเร็จครั้งที่ " + attempts;
+                if (gps != null && gps.length >= 2 && valid(gps[0], gps[1])) {
+                    latitude = gps[0];
+                    longitude = gps[1];
+                    hasCoordinate = true;
+                    statusText.setText("✓ พบ GPS พร้อมนำทาง");
+                    detailText.setText(String.format(Locale.US,
+                            "📍 %.7f, %.7f\n%s\nอ่านจากไฟล์สำเนาใน Dorm Camera",
+                            latitude, longitude, metadata));
+                    addGpsButton.setVisibility(View.GONE);
+                    setCoordinateActions(true);
                 } else {
-                    handleSharedImage(result);
+                    hasCoordinate = false;
+                    statusText.setText("เปิดไฟล์ได้ แต่ไม่พบ GPS");
+                    detailText.setText(metadata + "\nGPS อาจไม่มีในไฟล์ หรือแหล่งไฟล์อาจปกปิด EXIF\n"
+                            + "สามารถเพิ่มตำแหน่งด้วยแผนที่และสร้างสำเนาใหม่ได้");
+                    addGpsButton.setVisibility(View.VISIBLE);
+                    setCoordinateActions(false);
                 }
             });
-        }, "dorm-unzip-shared-gps").start();
+        }, "dorm-receive-snapshot-v0213").start();
     }
 
     private void handleSharedText(@NonNull String value) {
+        ++receiveSequence;
+        lastIncomingUri = null;
+        retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
         imageView.setVisibility(View.GONE);
         titleText.setText("ข้อความ / ตำแหน่งที่แชร์มา");
@@ -370,6 +434,9 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     }
 
     private void showUnsupported(String message) {
+        ++receiveSequence;
+        lastIncomingUri = null;
+        retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
         imageView.setVisibility(View.GONE);
         titleText.setText("รับข้อมูลไม่สำเร็จ");
