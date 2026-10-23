@@ -82,15 +82,24 @@ public final class ShareGpsArchive {
         }
     }
 
+    /**
+     * Extract the GPS-bearing image first. Bundles include NoGPS preview before GPS image;
+     * old behavior accidentally returned the NoGPS preview and could not navigate.
+     */
     @NonNull
     public static Uri extractFirstImage(@NonNull Context context, @NonNull Uri archiveUri)
             throws IOException {
         File dir = cacheFolder(context, "received_gps_zip");
+        File fallback = null;
         try (InputStream in = context.getContentResolver().openInputStream(archiveUri)) {
             if (in == null) throw new IOException("LINE ไม่อนุญาตให้เปิดไฟล์ ZIP นี้");
             try (ZipInputStream zip = new ZipInputStream(in)) {
                 ZipEntry entry;
+                int scanned = 0;
                 while ((entry = zip.getNextEntry()) != null) {
+                    if (++scanned > 50) {
+                        throw new IOException("ZIP มีรายการมากเกินกว่าที่รองรับ");
+                    }
                     if (entry.isDirectory() || !isSupportedImage(entry.getName())) {
                         zip.closeEntry();
                         continue;
@@ -106,14 +115,30 @@ public final class ShareGpsArchive {
                         if (outFile.length() < 32) {
                             throw new IOException("ไฟล์ภาพภายใน ZIP ไม่สมบูรณ์");
                         }
-                        // Do not reinterpret or recompress the image: preserve original EXIF.
-                        return providerUri(context, outFile);
+                        boolean hasGps = false;
+                        try {
+                            double[] ll = new ExifInterface(outFile.getAbsolutePath()).getLatLong();
+                            hasGps = ll != null && ll.length >= 2;
+                        } catch (IOException ignored) {}
+                        if (hasGps) {
+                            if (fallback != null) fallback.delete();
+                            return providerUri(context, outFile);
+                        }
+                        if (fallback == null) fallback = outFile;
+                        else outFile.delete();
                     } catch (IOException e) {
                         outFile.delete();
                         throw e;
                     }
+                    zip.closeEntry();
                 }
             }
+            if (fallback != null) {
+                return providerUri(context, fallback);
+            }
+        } catch (IOException | RuntimeException ex) {
+            if (fallback != null) fallback.delete();
+            throw ex;
         }
         throw new IOException("ZIP ไม่มีไฟล์ภาพ JPG/PNG/HEIC/WEBP ที่รองรับ");
     }
