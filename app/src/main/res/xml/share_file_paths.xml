@@ -3,4 +3,5 @@
     <cache-path name="share_no_gps" path="share_no_gps/" />
     <cache-path name="share_gps_zip" path="share_gps_zip/" />
     <cache-path name="received_gps_zip" path="received_gps_zip/" />
+    <cache-path name="share_bundle" path="share_bundle/" />
 </paths>
