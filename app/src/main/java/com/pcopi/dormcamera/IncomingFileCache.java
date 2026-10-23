@@ -80,7 +80,7 @@ public final class IncomingFileCache {
             return new Result(FileProvider.getUriForFile(context,
                     context.getPackageName() + ".fileprovider", output),
                     name, count, isZip);
-        } catch (IOException | SecurityException | RuntimeException e) {
+        } catch (IOException | RuntimeException e) {
             output.delete();
             throw e;
         }
