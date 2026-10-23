@@ -1,11 +1,13 @@
 package com.pcopi.dormcamera;
 
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -30,6 +32,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.exifinterface.media.ExifInterface;
@@ -49,6 +53,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     private static final int SHARE_LOCATION = 1;
     private static final int SHARE_ORIGINAL_FILE = 2;
     private static final int SHARE_VISIBLE_NO_GPS = 3;
+    private static final int REQ_MEDIA_LOCATION = 3093;
 
     private final List<PlaceItem> allPlaces = new ArrayList<>();
     private final Set<String> favorites = new HashSet<>();
@@ -75,7 +80,22 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         Set<String> saved = prefs.getStringSet(KEY_FAVORITES, Collections.emptySet());
         if (saved != null) favorites.addAll(saved);
         buildUi();
-        loadPlaces();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && ContextCompat.checkSelfPermission(this,
+                        Manifest.permission.ACCESS_MEDIA_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+            summaryText.setText("กรุณาอนุญาตอ่าน GPS ในภาพ");
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_MEDIA_LOCATION}, REQ_MEDIA_LOCATION);
+        } else {
+            loadPlaces();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_MEDIA_LOCATION) loadPlaces();
     }
 
     @Override
@@ -115,7 +135,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.12 • Smart Share ภาพ JPEG / GPS ZIP");
+        subtitle.setText("V0.2.14 • อ่าน GPS ต้นฉบับ / Smart Share");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
@@ -211,9 +231,8 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                         String name = cursor.getString(nameIndex);
                         long dateAdded = cursor.getLong(dateIndex);
                         Uri uri = ContentUris.withAppendedId(collection, id);
-                        try (InputStream input = resolver.openInputStream(uri)) {
-                            if (input == null) continue;
-                            double[] ll = new ExifInterface(input).getLatLong();
+                        try {
+                            double[] ll = readOriginalPhotoGps(resolver, uri);
                             if (ll == null || ll.length < 2 || !valid(ll[0], ll[1])) continue;
                             Bitmap thumb = null;
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -242,6 +261,28 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
                 renderPlaces();
             });
         }, "my-places-v029-loader").start();
+    }
+
+    @Nullable
+    private double[] readOriginalPhotoGps(ContentResolver resolver, Uri uri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && ContextCompat.checkSelfPermission(this,
+                        Manifest.permission.ACCESS_MEDIA_LOCATION)
+                        == PackageManager.PERMISSION_GRANTED) {
+            try (InputStream original = resolver.openInputStream(MediaStore.setRequireOriginal(uri))) {
+                if (original != null) {
+                    double[] result = new ExifInterface(original).getLatLong();
+                    if (result != null) return result;
+                }
+            } catch (Exception ignored) {
+                // Fall back to the accessible stream when an original URI isn't provided.
+            }
+        }
+        try (InputStream preview = resolver.openInputStream(uri)) {
+            return preview == null ? null : new ExifInterface(preview).getLatLong();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private void renderPlaces() {
