@@ -135,7 +135,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.14 • อ่าน GPS ต้นฉบับ / Smart Share");
+        subtitle.setText("V0.2.15 • Smart GPS Link เปิด Maps ได้ทันที");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
@@ -290,6 +290,18 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         listContainer.removeAllViews();
         String query = searchBox.getText().toString().trim().toLowerCase(Locale.ROOT);
         int shown = 0;
+        int savedVisible = 0;
+        List<SavedGpsPlaces.Entry> storedLinks = SavedGpsPlaces.all(this);
+        for (SavedGpsPlaces.Entry entry : storedLinks) {
+            if (favoritesOnly) continue;
+            if (!query.isEmpty()
+                    && !entry.title.toLowerCase(Locale.ROOT).contains(query)
+                    && !String.format(Locale.US, "%.6f,%.6f", entry.lat, entry.lon)
+                            .contains(query)) continue;
+            listContainer.addView(makeSavedGpsCard(entry));
+            shown++;
+            savedVisible++;
+        }
         for (PlaceItem item : allPlaces) {
             boolean favorite = favorites.contains(item.uri.toString());
             if (favoritesOnly && !favorite) continue;
@@ -302,13 +314,14 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
 
         int favoriteCount = 0;
         for (PlaceItem item : allPlaces) if (favorites.contains(item.uri.toString())) favoriteCount++;
-        summaryText.setText(String.format(Locale.getDefault(), "แสดง %d / %d • ⭐ %d",
-                shown, allPlaces.size(), favoriteCount));
+        summaryText.setText(String.format(Locale.getDefault(),
+                "แสดง %d • รูป GPS %d • ลิงก์ %d",
+                shown, allPlaces.size(), storedLinks.size()));
 
         if (shown == 0) {
             TextView empty = new TextView(this);
-            empty.setText(allPlaces.isEmpty()
-                    ? "ยังไม่พบภาพที่มี GPS\nสร้างสำเนาพร้อม GPS ก่อน แล้วกลับมาหน้านี้"
+            empty.setText(allPlaces.isEmpty() && storedLinks.isEmpty()
+                    ? "ยังไม่พบภาพหรือสถานที่ที่มี GPS\nสามารถรับลิงก์จาก LINE แล้วบันทึกได้"
                     : "ไม่พบรายการที่ตรงกับการค้นหา");
             empty.setTextColor(0xFFB9BBC2);
             empty.setTextSize(15f);
@@ -375,7 +388,89 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         actions.addView(nav, actionParams(dp(6)));
         actions.addView(share, actionParams(dp(6)));
         card.addView(actions);
+
+        PressFeedbackButton link = makeButton("🧭 ส่งลิงก์นำทาง Google Maps • ไม่ต้องส่งรูป", 13f);
+        link.setOnClickListener(v -> shareLocationText(item));
+        LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        linkParams.setMargins(0, dp(7), 0, 0);
+        card.addView(link, linkParams);
         return card;
+    }
+
+    /** Text-only GPS locations saved from LINE live alongside photo-based places. */
+    private View makeSavedGpsCard(SavedGpsPlaces.Entry entry) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(10), dp(10), dp(10), dp(10));
+        card.setBackgroundResource(R.drawable.bg_control_panel);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.setMargins(0, 0, 0, dp(9));
+        card.setLayoutParams(cardParams);
+
+        TextView name = new TextView(this);
+        name.setText("📍 " + entry.title);
+        name.setTextColor(0xFFFFFFFF);
+        name.setTextSize(16f);
+        name.setMaxLines(2);
+        card.addView(name);
+
+        TextView detail = new TextView(this);
+        detail.setText(String.format(Locale.US,
+                "%.7f, %.7f  •  บันทึกจากลิงก์ LINE (ไม่ต้องมีรูป)",
+                entry.lat, entry.lon));
+        detail.setTextColor(0xFFB9BBC2);
+        detail.setTextSize(12f);
+        detail.setPadding(0, dp(5), 0, dp(6));
+        card.addView(detail);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        PressFeedbackButton map = makeButton("🗺 แผนที่", 11f);
+        map.setOnClickListener(v -> {
+            String url = "https://www.google.com/maps/search/?api=1&query="
+                    + String.format(Locale.US, "%.7f%%2C%.7f", entry.lat, entry.lon);
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+            catch (Exception e) { showShareError("เปิดแผนที่ไม่ได้: " + messageOf(e)); }
+        });
+        PressFeedbackButton nav = makeButton("🧭 นำทาง", 11f);
+        nav.setOnClickListener(v -> openNavigationLink(entry.lat, entry.lon));
+        PressFeedbackButton share = makeButton("↗ ส่งลิงก์", 11f);
+        share.setOnClickListener(v -> shareGpsText(entry.title, entry.lat, entry.lon));
+        PressFeedbackButton remove = makeButton("ลบ", 11f);
+        remove.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("ลบสถานที่ที่บันทึก?")
+                .setMessage(entry.title + "\nลบเฉพาะพิกัดที่บันทึกใน Dorm Camera")
+                .setPositiveButton("ลบ", (dialog, which) -> {
+                    SavedGpsPlaces.delete(this, entry.id);
+                    renderPlaces();
+                })
+                .setNegativeButton("ยกเลิก", null).show());
+        actions.addView(map, actionParams(0));
+        actions.addView(nav, actionParams(dp(4)));
+        actions.addView(share, actionParams(dp(4)));
+        actions.addView(remove, actionParams(dp(4)));
+        card.addView(actions);
+        return card;
+    }
+
+    private void openNavigationLink(double lat, double lon) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse(SmartGpsLink.navigationUrl(lat, lon))));
+        } catch (Exception ex) {
+            Toast.makeText(this, "เปิด Google Maps ไม่สำเร็จ: "
+                    + messageOf(ex), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void shareGpsText(String title, double lat, double lon) {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_SUBJECT, title);
+        share.putExtra(Intent.EXTRA_TEXT, SmartGpsLink.shareText(title, lat, lon));
+        launchShareIntent(share, "ส่งลิงก์นำทาง • ผู้รับไม่ต้องมี Dorm Camera");
     }
 
     private void showSmartShare(PlaceItem item) {
@@ -384,15 +479,15 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.setPadding(dp(18), dp(4), dp(18), dp(4));
 
         TextView note = new TextView(this);
-        note.setText("เลือกได้หลายรายการ • ส่งรวม ZIP เพื่อเลือกผู้รับเพียงครั้งเดียว\n"
-                + "ภาพปกติเปิดดูหลังแตก ZIP • ภาพ GPS นำทางผ่าน Dorm Camera ได้");
+        note.setText("เลือกส่งลิงก์อย่างเดียวได้ ไม่ต้องใช้รูปหรือ ZIP\n"
+                + "เพื่อนที่ไม่มี Dorm Camera เปิด Google Maps ได้ทันที");
         note.setTextColor(0xFFB9BBC2);
         note.setTextSize(13f);
         note.setLineSpacing(0f, 1.1f);
         note.setPadding(0, 0, 0, dp(8));
         content.addView(note);
 
-        CheckBox location = checkBox("📍 ตำแหน่ง + ลิงก์แผนที่", true);
+        CheckBox location = checkBox("🧭 พิกัด + ลิงก์นำทาง Google Maps", true);
         CheckBox original = checkBox("📎 ภาพต้นฉบับพร้อม GPS", true);
         CheckBox visible = checkBox("🖼 ภาพปกติ ไม่มี GPS", true);
         content.addView(location, checkParams());
@@ -652,11 +747,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     }
 
     private void shareLocationText(PlaceItem item) {
-        Intent share = new Intent(Intent.ACTION_SEND);
-        share.setType("text/plain");
-        share.putExtra(Intent.EXTRA_SUBJECT, friendlyName(item.name));
-        share.putExtra(Intent.EXTRA_TEXT, buildShareText(item));
-        launchShareIntent(share, "แชร์ตำแหน่ง / ลิงก์แผนที่");
+        shareGpsText(friendlyName(item.name), item.lat, item.lon);
     }
 
     private void shareOriginalFile(PlaceItem item) {
@@ -721,11 +812,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
     }
 
     private String buildShareText(PlaceItem item) {
-        String coord = String.format(Locale.US, "%.7f,%.7f", item.lat, item.lon);
-        String link = "https://www.google.com/maps/search/?api=1&query=" + coord;
-        return friendlyName(item.name)
-                + "\nพิกัด: " + coord
-                + "\nเปิดแผนที่: " + link;
+        return SmartGpsLink.shareText(friendlyName(item.name), item.lat, item.lon);
     }
 
     private LinearLayout.LayoutParams actionParams(int startMargin) {
