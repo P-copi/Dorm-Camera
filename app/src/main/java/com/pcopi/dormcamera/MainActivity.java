@@ -917,10 +917,37 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
 
-            statusText.setText("บันทึกวิดีโอแล้ว ✓");
-            showSaveBanner("บันทึกวิดีโอแล้ว", roomLabel);
+            statusText.setText("วิดีโอบันทึกแล้ว • กำลังตรวจข้อมูล GPS...");
             if (latestMediaView != null) latestMediaView.postDelayed(latestMediaView::refresh, 650L);
-            statusText.postDelayed(this::updateCameraStatus, 1500L);
+            Uri finalizedVideo = finalizeEvent.getOutputResults().getOutputUri();
+            new Thread(() -> {
+                String embeddedLocation = null;
+                MediaMetadataRetriever reader = new MediaMetadataRetriever();
+                try {
+                    if (finalizedVideo != null && !Uri.EMPTY.equals(finalizedVideo)) {
+                        reader.setDataSource(MainActivity.this, finalizedVideo);
+                    } else if (legacyVideoFile != null) {
+                        reader.setDataSource(legacyVideoFile.getAbsolutePath());
+                    }
+                    embeddedLocation = reader.extractMetadata(
+                            MediaMetadataRetriever.METADATA_KEY_LOCATION);
+                } catch (Exception ignored) {
+                } finally {
+                    try { reader.release(); } catch (Exception ignored) { }
+                }
+                boolean gpsVerified = embeddedLocation != null
+                        && !embeddedLocation.trim().isEmpty();
+                runOnUiThread(() -> {
+                    if (gpsVerified) {
+                        statusText.setText("วิดีโอพร้อม GPS ตรวจสอบแล้ว ✓");
+                        showSaveBanner("วิดีโอมี GPS ✓", roomLabel);
+                    } else {
+                        statusText.setText("วิดีโอบันทึกแล้ว แต่ตรวจ GPS ในไฟล์ไม่พบ");
+                        showSaveBanner("วิดีโอ • ยังตรวจ GPS ไม่พบ", roomLabel);
+                    }
+                    statusText.postDelayed(MainActivity.this::updateCameraStatus, 4500L);
+                });
+            }, "dorm-video-verify-location").start();
         }
     }
 
