@@ -417,9 +417,9 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("🖼 ส่งภาพพร้อมลิงก์นำทาง")
                 .setMessage("ส่งเป็นรูป JPEG ที่เห็นได้ในห้องแชต LINE ทันที "
-                        + "ไม่ส่ง ZIP และไม่แนบ GPS ไว้ในไฟล์รูป\\n\\n"
+                        + "ไม่ส่ง ZIP และไม่แนบ GPS ไว้ในไฟล์รูป\n\n"
                         + "แอปจะส่งลิงก์นำทางไปพร้อมกับรูป และสำรองลิงก์ไว้ในคลิปบอร์ด"
-                        + " หาก LINE มีช่องเขียนข้อความ ให้กดวางลิงก์ที่นั่นก่อนกดส่ง\\n\\n"
+                        + " หาก LINE มีช่องเขียนข้อความ ให้กดวางลิงก์ที่นั่นก่อนกดส่ง\n\n"
                         + "LINE บางรุ่นอาจส่งเฉพาะภาพ จึงต้องตรวจที่ห้องแชตจริง")
                 .setPositiveButton("เตรียมรูปและแชร์", (d, which) -> {
                     Toast.makeText(this, "กำลังเตรียมรูปภาพที่ไม่มี GPS...", Toast.LENGTH_SHORT).show();
