@@ -2,6 +2,8 @@ package com.pcopi.dormcamera;
 
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -47,6 +49,10 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     private PressFeedbackButton addGpsButton;
     private PressFeedbackButton linkButton;
     private PressFeedbackButton chooseFileButton;
+    private PressFeedbackButton savePlaceButton;
+    private PressFeedbackButton pasteLinkButton;
+    private PressFeedbackButton forwardLinkButton;
+    private String receivedPlaceTitle = "ตำแหน่งจาก LINE";
     private PressFeedbackButton retryFileButton;
     @Nullable private Uri lastIncomingUri;
     private int receiveSequence;
@@ -87,7 +93,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         top.addView(heading, new LinearLayout.LayoutParams(0, dp(42), 1f));
         root.addView(top);
 
-        TextView hint = text("รับ JPG / ZIP จาก LINE • คัดลอกก่อนตรวจ GPS", 12f, 0xFF8FC9A3);
+        TextView hint = text("รับลิงก์ Google Maps, ข้อความ, JPG หรือ ZIP จาก LINE", 12f, 0xFF8FC9A3);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(0, dp(6), 0, dp(8));
         root.addView(hint);
@@ -147,6 +153,29 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         chooseParams.setMargins(0, dp(8), 0, 0);
         root.addView(chooseFileButton, chooseParams);
 
+        savePlaceButton = button("💾 บันทึกพิกัดไว้ในสถานที่ของฉัน", 14f);
+        savePlaceButton.setOnClickListener(v -> saveReceivedPlace());
+        LinearLayout.LayoutParams placeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        placeParams.setMargins(0, dp(7), 0, 0);
+        root.addView(savePlaceButton, placeParams);
+        savePlaceButton.setVisibility(View.GONE);
+
+        forwardLinkButton = button("↗ ส่งต่อลิงก์นำทาง (ไม่ส่งรูป)", 13f);
+        forwardLinkButton.setOnClickListener(v -> forwardGpsLink());
+        LinearLayout.LayoutParams forwardParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        forwardParams.setMargins(0, dp(6), 0, 0);
+        root.addView(forwardLinkButton, forwardParams);
+        forwardLinkButton.setVisibility(View.GONE);
+
+        pasteLinkButton = button("📋 วางลิงก์ GPS จากคลิปบอร์ด", 13f);
+        pasteLinkButton.setOnClickListener(v -> pasteSharedGpsLink());
+        LinearLayout.LayoutParams pasteParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        pasteParams.setMargins(0, dp(6), 0, 0);
+        root.addView(pasteLinkButton, pasteParams);
+
         retryFileButton = button("↻ ลองอ่านไฟล์เดิมอีกครั้ง", 13f);
         retryFileButton.setOnClickListener(v -> {
             if (lastIncomingUri != null) handleSharedImage(lastIncomingUri);
@@ -201,7 +230,9 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         sharedLink = null;
         hasCoordinate = false;
         imageView.setVisibility(View.GONE);
-        titleText.setText("พร้อมรับไฟล์จาก LINE / Keep Memo");
+        savePlaceButton.setVisibility(View.GONE);
+        forwardLinkButton.setVisibility(View.GONE);
+        titleText.setText("พร้อมรับ GPS Link จาก LINE / Keep Memo");
         statusText.setText("เลือก JPG หรือ ZIP ที่ดาวน์โหลดแล้ว");
         detailText.setText("กดปุ่มเลือกไฟล์ด้านล่าง หรือเปิดแชร์เข้า Dorm Camera "
                 + "เมื่อ LINE อนุญาตให้ส่งไฟล์แล้ว");
@@ -275,6 +306,8 @@ public final class ReceiveShareActivity extends AppCompatActivity {
      */
     private void handleSharedImage(@NonNull Uri uri) {
         lastIncomingUri = uri;
+        savePlaceButton.setVisibility(View.GONE);
+        forwardLinkButton.setVisibility(View.GONE);
         final int sequence = ++receiveSequence;
         hasCoordinate = false;
         sharedImageUri = null;
@@ -399,38 +432,104 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
         imageView.setVisibility(View.GONE);
-        titleText.setText("ข้อความ / ตำแหน่งที่แชร์มา");
-        String trimmed = value.trim();
-        detailText.setText(trimmed.length() > 800 ? trimmed.substring(0, 800) + "…" : trimmed);
         addGpsButton.setVisibility(View.GONE);
 
-        sharedLink = findUrl(trimmed);
-        Matcher matcher = COORD_PATTERN.matcher(trimmed);
-        hasCoordinate = false;
-        while (matcher.find()) {
-            try {
-                double lat = Double.parseDouble(matcher.group(1));
-                double lon = Double.parseDouble(matcher.group(2));
-                if (valid(lat, lon)) {
-                    latitude = lat;
-                    longitude = lon;
-                    hasCoordinate = true;
-                    break;
-                }
-            } catch (Exception ignored) {}
-        }
-
-        if (hasCoordinate) {
-            statusText.setText(String.format(Locale.US,
-                    "✓ พบพิกัด %.7f, %.7f", latitude, longitude));
+        String trimmed = value.trim();
+        SmartGpsLink.Parsed parsed = SmartGpsLink.parse(trimmed);
+        if (parsed != null) {
+            latitude = parsed.latitude;
+            longitude = parsed.longitude;
+            receivedPlaceTitle = parsed.title;
+            sharedLink = parsed.navigationUrl;
+            hasCoordinate = true;
+            titleText.setText("📍 " + receivedPlaceTitle);
+            statusText.setText("✓ พบ GPS จากลิงก์ • พร้อมนำทาง");
+            detailText.setText(String.format(Locale.US,
+                    "พิกัด: %.7f, %.7f\nแตะนำทางเพื่อเปิด Google Maps\n"
+                    + "หรือบันทึกชื่อสถานที่โดยไม่ต้องมีภาพ\n%s",
+                    latitude, longitude, parsed.navigationUrl));
             setCoordinateActions(true);
+            savePlaceButton.setVisibility(View.VISIBLE);
+            forwardLinkButton.setVisibility(View.VISIBLE);
+            linkButton.setVisibility(View.GONE);
         } else {
-            statusText.setText(sharedLink != null
-                    ? "พบลิงก์แผนที่ แต่ยังอ่านพิกัดตรง ๆ ไม่ได้"
-                    : "ไม่พบพิกัดที่แอปอ่านได้");
+            receivedPlaceTitle = "ตำแหน่งจาก LINE";
+            sharedLink = null;
+            hasCoordinate = false;
+            titleText.setText("ยังอ่านพิกัดจากลิงก์ไม่ได้");
+            statusText.setText("กรุณาส่งพิกัดหรือลิงก์ Maps แบบเต็ม");
+            detailText.setText("ลิงก์สั้น maps.app.goo.gl ไม่บอกพิกัดโดยตรง\n"
+                    + "แนะนำให้ใช้ Smart GPS Link จาก Dorm Camera\n\nข้อมูลที่รับ:\n"
+                    + (trimmed.length() > 600 ? trimmed.substring(0, 600) + "…" : trimmed));
             setCoordinateActions(false);
+            savePlaceButton.setVisibility(View.GONE);
+            forwardLinkButton.setVisibility(View.GONE);
+            linkButton.setVisibility(View.GONE);
         }
-        linkButton.setVisibility(sharedLink == null ? View.GONE : View.VISIBLE);
+    }
+
+    private void pasteSharedGpsLink() {
+        ClipboardManager clipboard =
+                (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null || !clipboard.hasPrimaryClip()
+                || clipboard.getPrimaryClip() == null
+                || clipboard.getPrimaryClip().getItemCount() == 0) {
+            Toast.makeText(this, "ยังไม่มีลิงก์ในคลิปบอร์ด", Toast.LENGTH_LONG).show();
+            return;
+        }
+        CharSequence clip = clipboard.getPrimaryClip().getItemAt(0).coerceToText(this);
+        if (clip != null && clip.length() > 0) handleSharedText(clip.toString());
+    }
+
+    private void forwardGpsLink() {
+        if (!hasCoordinate) return;
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT,
+                SmartGpsLink.shareText(receivedPlaceTitle, latitude, longitude));
+        try { startActivity(Intent.createChooser(share, "แชร์พิกัดนำทาง")); }
+        catch (Exception ex) {
+            Toast.makeText(this, "แชร์ไม่สำเร็จ: " + messageOf(ex), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void saveReceivedPlace() {
+        if (!hasCoordinate) return;
+        final double lat = latitude;
+        final double lon = longitude;
+        EditText nameInput = new EditText(this);
+        nameInput.setSingleLine(true);
+        nameInput.setHint("ชื่อสถานที่");
+        nameInput.setText(receivedPlaceTitle);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("บันทึกพิกัดในสถานที่ของฉัน")
+                .setMessage(String.format(Locale.US, "%.7f, %.7f", lat, lon))
+                .setView(nameInput)
+                .setPositiveButton("บันทึก", null)
+                .setNegativeButton("ยกเลิก", null).create();
+        dialog.setOnShowListener(x -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    String name = nameInput.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        nameInput.setError("กรุณาใส่ชื่อสถานที่");
+                        return;
+                    }
+                    try {
+                        SavedGpsPlaces.save(this, name, lat, lon);
+                        receivedPlaceTitle = name;
+                        dialog.dismiss();
+                        new AlertDialog.Builder(this)
+                                .setTitle("✓ บันทึกพิกัดแล้ว")
+                                .setMessage("สถานที่นี้อยู่ในเมนู “สถานที่ของฉัน” โดยไม่ต้องมีรูปภาพ")
+                                .setPositiveButton("เปิดสถานที่ของฉัน", (d, which) ->
+                                        startActivity(new Intent(this, MyPlacesV028Activity.class)))
+                                .setNegativeButton("อยู่หน้านี้", null).show();
+                    } catch (Exception err) {
+                        Toast.makeText(this, "บันทึกไม่สำเร็จ: " + messageOf(err),
+                                Toast.LENGTH_LONG).show();
+                    }
+                }));
+        dialog.show();
     }
 
     private void showUnsupported(String message) {
@@ -439,6 +538,8 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
         imageView.setVisibility(View.GONE);
+        savePlaceButton.setVisibility(View.GONE);
+        forwardLinkButton.setVisibility(View.GONE);
         titleText.setText("รับข้อมูลไม่สำเร็จ");
         statusText.setText(message);
         detailText.setText("ลองดาวน์โหลดไฟล์จาก LINE แล้วเข้าเครื่องมือ → รับไฟล์ภาพจาก LINE / เพื่อน เพื่อตรวจ JPG หรือ ZIP");
@@ -472,10 +573,10 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     private void navigate() {
         if (!hasCoordinate) return;
         String coord = String.format(Locale.US, "%.7f,%.7f", latitude, longitude);
-        Intent nav = new Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + coord));
-        nav.setPackage("com.google.android.apps.maps");
-        try { startActivity(nav); }
-        catch (ActivityNotFoundException e) { openMap(); }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse(SmartGpsLink.navigationUrl(latitude, longitude))));
+        } catch (ActivityNotFoundException e) { openMap(); }
     }
 
     private void openSharedLink() {
