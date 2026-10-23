@@ -135,7 +135,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.15 • Smart GPS Link เปิด Maps ได้ทันที");
+        subtitle.setText("V0.2.15 • Smart GPS Link / สถานที่จาก LINE");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
