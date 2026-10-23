@@ -46,6 +46,7 @@ import java.util.Set;
 public final class MyPlacesV028Activity extends AppCompatActivity {
     private static final String PREFS = "my_places_v025";
     private static final String KEY_FAVORITES = "favorite_uris";
+    private static final int SHARE_COMBINED = 4;
     private static final int SHARE_LOCATION = 1;
     private static final int SHARE_ORIGINAL_FILE = 2;
     private static final int SHARE_VISIBLE_NO_GPS = 3;
@@ -342,7 +343,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.setPadding(dp(18), dp(4), dp(18), dp(4));
 
         TextView note = new TextView(this);
-        note.setText("เลือกได้หลายรายการ แล้วกด “เริ่มแชร์” ครั้งเดียว\n"
+        note.setText("เลือกตำแหน่ง + ภาพปกติ เพื่อทดลองส่งภาพพร้อมข้อความในครั้งเดียว\n"
                 + "ภาพไม่มี GPS จะเตรียมให้เสร็จก่อนเริ่มแชร์\n"
                 + "ไฟล์ต้นฉบับพร้อม GPS จะส่งเป็นรายการสุดท้าย");
         note.setTextColor(0xFFB9BBC2);
@@ -352,14 +353,14 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(note);
 
         CheckBox location = checkBox("📍 แชร์ตำแหน่ง + ลิงก์แผนที่", true);
-        CheckBox original = checkBox("📎 แชร์ภาพเป็นไฟล์ (รักษา GPS)", true);
+        CheckBox original = checkBox("📎 แชร์ภาพเป็นไฟล์ (รักษา GPS)", false);
         CheckBox visible = checkBox("🖼 ภาพปกติ (เห็นภาพ • ไม่มี GPS)", true);
         content.addView(location, checkParams());
         content.addView(original, checkParams());
         content.addView(visible, checkParams());
 
         TextView privacy = new TextView(this);
-        privacy.setText("หมายเหตุ: LINE ยังต้องให้เลือกผู้รับ/ยืนยันการส่งทีละรายการ");
+        privacy.setText("หาก LINE ไม่รับข้อความพร้อมภาพ ให้กดวางข้อความที่เตรียมไว้ในช่องแชต • ไม่ใช้ ZIP");
         privacy.setTextColor(0xFF8F929A);
         privacy.setTextSize(11f);
         privacy.setPadding(0, dp(8), 0, 0);
@@ -419,8 +420,11 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
 
     private void beginShareQueue(PlaceItem item, boolean useLocation, boolean useVisible, boolean useOriginal) {
         shareQueue.clear();
-        if (useLocation) shareQueue.add(SHARE_LOCATION);
-        if (useVisible) shareQueue.add(SHARE_VISIBLE_NO_GPS);
+        if (useLocation && useVisible) shareQueue.add(SHARE_COMBINED);
+        else {
+            if (useLocation) shareQueue.add(SHARE_LOCATION);
+            if (useVisible) shareQueue.add(SHARE_VISIBLE_NO_GPS);
+        }
         if (useOriginal) shareQueue.add(SHARE_ORIGINAL_FILE);
         queuedShareItem = item;
         shareQueueIndex = 0;
@@ -449,7 +453,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         PlaceItem item = queuedShareItem;
         if (item == null || shareQueueIndex >= shareQueue.size()) {
             if (queuedShareItem != null) {
-                Toast.makeText(this, "แชร์ครบรายการที่เลือกแล้ว", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "จบขั้นตอนเปิดหน้าต่างแชร์ • ตรวจสอบการส่งใน LINE", Toast.LENGTH_SHORT).show();
             }
             queuedShareItem = null;
             preparedVisibleNoGpsUri = null;
@@ -461,7 +465,10 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
 
         int kind = shareQueue.get(shareQueueIndex++);
         String step = shareQueueIndex + "/" + shareQueue.size();
-        if (kind == SHARE_LOCATION) {
+        if (kind == SHARE_COMBINED) {
+            Toast.makeText(this, "รายการ " + step + " • ภาพ + ลิงก์ในครั้งเดียว", Toast.LENGTH_SHORT).show();
+            shareCombined(item);
+        } else if (kind == SHARE_LOCATION) {
             Toast.makeText(this, "รายการ " + step + " • ตำแหน่ง + ลิงก์", Toast.LENGTH_SHORT).show();
             shareLocationText(item);
         } else if (kind == SHARE_VISIBLE_NO_GPS) {
@@ -471,6 +478,30 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
             Toast.makeText(this, "รายการ " + step + " • ไฟล์ต้นฉบับพร้อม GPS (รายการสุดท้าย)", Toast.LENGTH_SHORT).show();
             shareOriginalFile(item);
         }
+    }
+
+    private void shareCombined(PlaceItem item) {
+        Uri cleanUri = preparedVisibleNoGpsUri;
+        if (cleanUri == null) {
+            Toast.makeText(this, "เตรียมภาพไม่สำเร็จ", Toast.LENGTH_LONG).show();
+            handler.postDelayed(this::launchNextQueuedShare, 300L);
+            return;
+        }
+        String message = buildShareText(item);
+        android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("Dorm Camera Maps", message));
+        }
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("image/jpeg");
+        share.putExtra(Intent.EXTRA_STREAM, cleanUri);
+        share.putExtra(Intent.EXTRA_TEXT, message);
+        share.putExtra(Intent.EXTRA_SUBJECT, friendlyName(item.name));
+        share.setClipData(ClipData.newUri(getContentResolver(), "DormCamera_NoGPS", cleanUri));
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Toast.makeText(this, "เตรียมภาพและลิงก์แล้ว • ถ้า LINE ไม่แสดงข้อความ ให้กดวาง", Toast.LENGTH_LONG).show();
+        launchShareIntent(share, "แชร์ภาพ + ตำแหน่ง");
     }
 
     private void shareLocationText(PlaceItem item) {
