@@ -587,8 +587,9 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         content.addView(saveBackup, saveParams);
 
         TextView privacy = new TextView(this);
-        privacy.setText("ส่งรวม: เพื่อนจะได้รับ ZIP หนึ่งไฟล์และแตกไฟล์เพื่อดูภาพ\n"
-                + "LINE ยังต้องให้เลือกผู้รับและยืนยันส่งหนึ่งครั้ง");
+        privacy.setText("เฉพาะตัวเลือก 1+3 จะทดลองส่งเป็นรูป JPEG พร้อมข้อความ (ไม่ใช้ ZIP)\n"
+                + "หาก LINE ตัดลิงก์ สามารถวางข้อความที่คัดลอกไว้ได้\n"
+                + "ตัวเลือกอื่นที่ส่งหลายรายการยังรวม ZIP เช่นเดิม");
         privacy.setTextColor(0xFF8F929A);
         privacy.setTextSize(11f);
         privacy.setPadding(0, dp(6), 0, 0);
@@ -597,7 +598,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Smart Share • ส่งภาพและนำทาง")
                 .setView(content)
-                .setPositiveButton("📦 ส่งรวมครั้งเดียว", null)
+                .setPositiveButton("📤 แชร์ที่เลือก", null)
                 .setNegativeButton("ยกเลิก", null)
                 .create();
 
@@ -739,7 +740,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
             runOnUiThread(() -> {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-                        .setText("📦 ส่งรวมครั้งเดียว");
+                        .setText("📤 แชร์ที่เลือก");
                 if (file == null) {
                     showPreparationError(failure == null
                             ? "เตรียมไฟล์แชร์ไม่สำเร็จ" : failure);
