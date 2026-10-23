@@ -198,6 +198,18 @@ public final class ReceiveShareActivity extends AppCompatActivity {
             return;
         }
 
+        // LINE text shares should win over ancillary ClipData URIs.
+        // Otherwise a GPS link could be mistaken for a file attachment.
+        String incomingType = intent.getType();
+        if (Intent.ACTION_SEND.equals(intent.getAction())
+                && incomingType != null && incomingType.startsWith("text/")) {
+            CharSequence incomingText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+            if (incomingText != null && incomingText.length() > 0) {
+                handleSharedText(incomingText.toString());
+                return;
+            }
+        }
+
         Uri stream = extractStreamUri(intent);
         if (stream != null) {
             String scheme = stream.getScheme();
