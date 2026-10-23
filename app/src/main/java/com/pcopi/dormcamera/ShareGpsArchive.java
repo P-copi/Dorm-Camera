@@ -25,7 +25,13 @@ public final class ShareGpsArchive {
 
     @NonNull
     public static Uri createGpsZip(@NonNull Context context,
-            @NonNull Uri source, @NonNull String displayName) throws IOException {
+            @NonNull Uri source, @NonNull String displayName,
+            double expectedLat, double expectedLon) throws IOException {
+        if (!Double.isFinite(expectedLat) || !Double.isFinite(expectedLon)
+                || expectedLat < -90 || expectedLat > 90
+                || expectedLon < -180 || expectedLon > 180) {
+            throw new IOException("พิกัด GPS ของรายการนี้ไม่ถูกต้อง");
+        }
         File dir = cacheFolder(context, "share_gps_zip");
         File temporary = File.createTempFile("gps_source_", ".img", dir);
         try {
@@ -35,9 +41,21 @@ public final class ShareGpsArchive {
                 copyLimited(in, out, MAX_IMAGE_BYTES);
             }
             if (temporary.length() < 32) throw new IOException("ไฟล์ภาพต้นฉบับว่าง");
-            double[] coord = new ExifInterface(temporary.getAbsolutePath()).getLatLong();
+            ExifInterface metadata = new ExifInterface(temporary.getAbsolutePath());
+            double[] coord = metadata.getLatLong();
             if (coord == null || coord.length < 2) {
-                throw new IOException("ไฟล์ต้นฉบับที่ Android เปิดให้อ่านไม่มี GPS จึงไม่ส่งเป็นไฟล์รักษา GPS");
+                // MediaStore can redact GPS when exposing a stream even when
+                // Dorm Camera previously verified this image's coordinates.
+                // Restore only the same known GPS in the temporary export.
+                metadata.setLatLong(expectedLat, expectedLon);
+                metadata.saveAttributes();
+                coord = new ExifInterface(temporary.getAbsolutePath()).getLatLong();
+            }
+            if (coord == null || coord.length < 2
+                    || !Double.isFinite(coord[0]) || !Double.isFinite(coord[1])
+                    || Math.abs(coord[0] - expectedLat) > 0.0001
+                    || Math.abs(coord[1] - expectedLon) > 0.0001) {
+                throw new IOException("ตรวจ GPS ของไฟล์ที่จะส่งไม่ผ่าน กรุณาเลือกภาพอีกครั้ง");
             }
 
             String imageName = safeFilename(displayName, ".jpg");
