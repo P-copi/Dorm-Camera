@@ -115,7 +115,7 @@ public final class MyPlacesV028Activity extends AppCompatActivity {
         root.addView(top);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("V0.2.9 • ค้นหา • ⭐ โปรด • Smart Share 3 แบบ");
+        subtitle.setText("V0.2.10 • ค้นหา • ⭐ โปรด • Smart Share ภาพ+แผนที่");
         subtitle.setTextColor(0xFF8FC9A3);
         subtitle.setTextSize(12f);
         subtitle.setPadding(dp(2), dp(5), 0, dp(8));
