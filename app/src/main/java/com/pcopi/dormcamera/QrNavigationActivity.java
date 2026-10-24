@@ -172,7 +172,7 @@ public final class QrNavigationActivity extends AppCompatActivity {
         try {
             Result result = new MultiFormatReader().decode(bitmap);
             return result.getText();
-        } catch (NotFoundException | ChecksumException | FormatException e) {
+        } catch (Exception e) {
             return null;
         }
     }
