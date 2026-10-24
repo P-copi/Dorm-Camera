@@ -50,6 +50,10 @@ public final class ToolsActivity extends AppCompatActivity {
         root.addView(placeDetail, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        PressFeedbackButton scanner = makeButton("▣  สแกน QR นำทาง (กล้องหน้า/หลัง หรือรูปภาพ)");
+        scanner.setOnClickListener(v -> startActivity(new Intent(this, QrNavigationActivity.class)));
+        root.addView(scanner, buttonParams());
+
         PressFeedbackButton navigator = makeButton("🧭  นำทาง / GPS จากภาพ");
         navigator.setContentDescription("เลือกภาพ เพิ่ม GPS จากแผนที่ ตั้งชื่อสำเนา แล้วนำทาง");
         navigator.setOnClickListener(v -> startActivity(new Intent(this, PhotoNavigatorV024Activity.class)));
@@ -73,7 +77,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView note = new TextView(this);
-        note.setText("V0.2.14 • GPS ถ่ายภาพและวิดีโอ / รับไฟล์จาก LINE");
+        note.setText("V0.2.18 • GPS ถ่ายภาพและวิดีโอ / รับไฟล์จาก LINE");
         note.setTextColor(0xFF8F929A);
         note.setTextSize(12f);
         note.setPadding(dp(4), dp(6), dp(4), 0);
