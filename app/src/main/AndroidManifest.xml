@@ -67,6 +67,7 @@
         <activity android:name=".PhotoNavigatorV024Activity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorFixedActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PhotoNavigatorActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name=".QrNavigationActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".ToolsActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".PreviewActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".ExplorerActivity" android:screenOrientation="portrait" android:exported="false" />
