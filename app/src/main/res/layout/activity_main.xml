@@ -358,7 +358,7 @@
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
-            <Space android:layout_width="28dp" android:layout_height="1dp" />
+            <Space android:layout_width="18dp" android:layout_height="1dp" />
 
             <com.pcopi.dormcamera.SafeCaptureButton
                 android:id="@+id/captureButton"
@@ -374,7 +374,31 @@
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
-            <Space android:layout_width="28dp" android:layout_height="1dp" />
+            <Space android:layout_width="12dp" android:layout_height="1dp" />
+
+            <!-- Reserved space avoids shutter movement when recording starts.
+                 Pause/resume never finalizes the current MP4. -->
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/videoPauseButton"
+                android:layout_width="58dp"
+                android:layout_height="62dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="Ⅱ"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:contentDescription="หยุดบันทึกวิดีโอชั่วคราว"
+                android:elevation="5dp"
+                android:visibility="invisible"
+                android:enabled="false"
+                android:background="@drawable/bg_button_dark"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
+
+            <Space android:layout_width="7dp" android:layout_height="1dp" />
 
             <com.pcopi.dormcamera.VideoControlButton
                 android:id="@+id/videoButton"
