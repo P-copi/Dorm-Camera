@@ -211,7 +211,7 @@
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="11sp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_control_azure"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
@@ -227,7 +227,7 @@
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="11sp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_control_violet"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
@@ -243,7 +243,7 @@
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="11sp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_control_amber"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
@@ -259,9 +259,121 @@
                 android:textAllCaps="false"
                 android:textColor="#FFFFFF"
                 android:textSize="11sp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_control_teal"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/sliderToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1.1"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="🎚 แสง / ซูม  ▾"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:contentDescription="เปิดหรือปิดแถบเลื่อนปรับแสงและซูม"
+                android:background="@drawable/bg_control_teal"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
+
+            <com.pcopi.dormcamera.PressFeedbackButton
+                android:id="@+id/nightLightsButton"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:padding="0dp"
+                android:text="🌙 แสงสีไฟ"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:contentDescription="ตั้งแสงสำหรับรักษาสีของไฟยามค่ำคืน"
+                android:background="@drawable/bg_control_night"
+                android:backgroundTint="@null"
+                android:stateListAnimator="@null" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/cameraSlidersPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:padding="8dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:background="@drawable/bg_control_panel">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="☀️ ความสว่าง EV"
+                    android:textSize="13sp"
+                    android:textColor="#FFFFFF" />
+                <TextView
+                    android:id="@+id/exposureSliderValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="EV 0.0"
+                    android:textColor="#FFD18A"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/exposureSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:max="100"
+                android:progress="50"
+                android:progressTint="#FFBC53"
+                android:thumbTint="#FFBC53"
+                android:contentDescription="เลื่อนเพื่อปรับค่าชดเชยแสงของกล้อง" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🔎 ระดับซูม"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/zoomSliderValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1.0×"
+                    android:textColor="#69E2D6"
+                    android:textSize="13sp" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/zoomSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#27C7B1"
+                android:thumbTint="#27C7B1"
+                android:contentDescription="เลื่อนเพื่อซูมภาพด้วยกล้อง" />
         </LinearLayout>
 
         <LinearLayout
@@ -280,7 +392,7 @@
                 android:textAllCaps="false"
                 android:textColor="#EDEDF2"
                 android:textSize="12sp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_control_violet"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
@@ -295,7 +407,7 @@
                 android:textAllCaps="false"
                 android:textColor="#EDEDF2"
                 android:textSize="12sp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_control_azure"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
 
