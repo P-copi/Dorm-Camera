@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cameraRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -180,6 +181,29 @@
             android:textColor="#FFFFFF"
             android:textSize="11sp"
             android:background="@drawable/bg_info_chip" />
+
+        <!-- One compact side handle remains visible while advanced tools are folded. -->
+        <com.pcopi.dormcamera.PressFeedbackButton
+            android:id="@+id/cameraToolsTab"
+            android:layout_width="62dp"
+            android:layout_height="68dp"
+            android:layout_gravity="end|bottom"
+            android:layout_marginEnd="9dp"
+            android:layout_marginBottom="116dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:gravity="center"
+            android:padding="2dp"
+            android:text="☷&#10;เครื่องมือ"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:contentDescription="เปิดเครื่องมือปรับแสง ซูม และตั้งค่ากล้อง"
+            android:elevation="9dp"
+            android:background="@drawable/bg_control_teal"
+            android:backgroundTint="@null"
+            android:stateListAnimator="@null" />
     </FrameLayout>
 
     <LinearLayout
@@ -194,6 +218,14 @@
         android:paddingTop="9dp"
         android:paddingBottom="11dp"
         android:background="@drawable/bg_control_panel">
+
+        <!-- The shutter/video row stays visible. Tool rows collapse as one block. -->
+        <LinearLayout
+            android:id="@+id/advancedCameraControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -444,6 +476,7 @@
                 android:background="@drawable/bg_button_dark"
                 android:backgroundTint="@null"
                 android:stateListAnimator="@null" />
+        </LinearLayout>
         </LinearLayout>
 
         <LinearLayout
