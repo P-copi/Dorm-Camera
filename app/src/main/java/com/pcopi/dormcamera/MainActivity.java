@@ -465,7 +465,7 @@ public class MainActivity extends AppCompatActivity {
             preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
             imageCapture = new ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                     .build();
 
             QualitySelector qualitySelector = QualitySelector.from(
@@ -524,11 +524,23 @@ public class MainActivity extends AppCompatActivity {
                     point,
                     FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
             ).setAutoCancelDuration(3, TimeUnit.SECONDS).build();
-            activeCamera.getCameraControl().startFocusAndMetering(action);
+            final Camera focusCamera = activeCamera;
+            final ListenableFuture<androidx.camera.core.FocusMeteringResult> focusResult =
+                    focusCamera.getCameraControl().startFocusAndMetering(action);
             zoomText.setText("กำลังโฟกัส...");
-            zoomText.postDelayed(() -> {
-                if (activeCamera != null) updateZoomUi(activeCamera.getCameraInfo().getZoomState().getValue());
-            }, 850L);
+            focusResult.addListener(() -> {
+                if (activeCamera != focusCamera) return;
+                try {
+                    zoomText.setText(focusResult.get().isFocusSuccessful()
+                            ? "โฟกัสสำเร็จ ✓" : "กำลังปรับโฟกัสอัตโนมัติ");
+                } catch (Exception e) {
+                    zoomText.setText("โฟกัสไม่สำเร็จ • แตะอีกครั้ง");
+                }
+                zoomText.postDelayed(() -> {
+                    if (activeCamera == focusCamera)
+                        updateZoomUi(focusCamera.getCameraInfo().getZoomState().getValue());
+                }, 1100L);
+            }, ContextCompat.getMainExecutor(this));
         } catch (Exception ignored) {
         }
     }
