@@ -47,6 +47,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
     private PressFeedbackButton mapButton;
     private PressFeedbackButton navButton;
     private PressFeedbackButton addGpsButton;
+    private PressFeedbackButton scanQrButton;
     private PressFeedbackButton linkButton;
     private PressFeedbackButton chooseFileButton;
     private PressFeedbackButton savePlaceButton;
@@ -138,6 +139,14 @@ public final class ReceiveShareActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
         addParams.setMargins(0, dp(8), 0, 0);
         root.addView(addGpsButton, addParams);
+
+        scanQrButton = button("▣ อ่าน QR ในภาพนี้ → นำทาง / บันทึกสถานที่", 13f);
+        scanQrButton.setOnClickListener(v -> openImageQrScanner());
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        qrParams.setMargins(0, dp(6), 0, 0);
+        root.addView(scanQrButton, qrParams);
+        scanQrButton.setVisibility(View.GONE);
 
         linkButton = button("🔗 เปิดลิงก์แผนที่", 14f);
         linkButton.setOnClickListener(v -> openSharedLink());
@@ -236,6 +245,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
 
     private void showReadyState() {
         ++receiveSequence;
+        scanQrButton.setVisibility(View.GONE);
         lastIncomingUri = null;
         retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
@@ -297,6 +307,22 @@ public final class ReceiveShareActivity extends AppCompatActivity {
         return null;
     }
 
+    private void openImageQrScanner() {
+        if (sharedImageUri == null) {
+            Toast.makeText(this, "กรุณาเลือกรูปก่อนอ่าน QR", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent scan = new Intent(this, QrNavigationActivity.class);
+        scan.putExtra(Intent.EXTRA_STREAM, sharedImageUri);
+        scan.setClipData(ClipData.newUri(getContentResolver(), "DormCamera_QR", sharedImageUri));
+        scan.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try { startActivity(scan); }
+        catch (Exception e) {
+            Toast.makeText(this, "เปิดตัวสแกน QR ไม่สำเร็จ: " + messageOf(e),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void pickDownloadedFile() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -318,6 +344,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
      */
     private void handleSharedImage(@NonNull Uri uri) {
         lastIncomingUri = uri;
+        scanQrButton.setVisibility(View.GONE);
         savePlaceButton.setVisibility(View.GONE);
         forwardLinkButton.setVisibility(View.GONE);
         final int sequence = ++receiveSequence;
@@ -400,6 +427,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
                             + (failure == null ? "ไม่ทราบสาเหตุ" : messageOf(failure)));
                     imageView.setVisibility(View.GONE);
                     addGpsButton.setVisibility(View.GONE);
+                    scanQrButton.setVisibility(View.GONE);
                     retryFileButton.setVisibility(View.VISIBLE);
                     setCoordinateActions(false);
                     return;
@@ -425,6 +453,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
                             "📍 %.7f, %.7f\n%s\nอ่านจากไฟล์สำเนาใน Dorm Camera",
                             latitude, longitude, metadata));
                     addGpsButton.setVisibility(View.GONE);
+                    scanQrButton.setVisibility(View.GONE);
                     setCoordinateActions(true);
                 } else {
                     hasCoordinate = false;
@@ -432,6 +461,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
                     detailText.setText(metadata + "\nGPS อาจไม่มีในไฟล์ หรือแหล่งไฟล์อาจปกปิด EXIF\n"
                             + "สามารถเพิ่มตำแหน่งด้วยแผนที่และสร้างสำเนาใหม่ได้");
                     addGpsButton.setVisibility(View.VISIBLE);
+                    scanQrButton.setVisibility(View.VISIBLE);
                     setCoordinateActions(false);
                 }
             });
@@ -440,6 +470,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
 
     private void handleSharedText(@NonNull String value) {
         ++receiveSequence;
+        scanQrButton.setVisibility(View.GONE);
         lastIncomingUri = null;
         retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
@@ -546,6 +577,7 @@ public final class ReceiveShareActivity extends AppCompatActivity {
 
     private void showUnsupported(String message) {
         ++receiveSequence;
+        scanQrButton.setVisibility(View.GONE);
         lastIncomingUri = null;
         retryFileButton.setVisibility(View.GONE);
         sharedImageUri = null;
