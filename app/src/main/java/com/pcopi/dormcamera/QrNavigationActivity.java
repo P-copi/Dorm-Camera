@@ -3,11 +3,9 @@ package com.pcopi.dormcamera;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.widget.EditText;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -26,15 +24,8 @@ import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.zxing.BinaryBitmap;
-import com.google.zxing.ChecksumException;
-import com.google.zxing.FormatException;
-import com.google.zxing.MultiFormatReader;
-import com.google.zxing.NotFoundException;
 import com.google.zxing.PlanarYUVLuminanceSource;
-import com.google.zxing.RGBLuminanceSource;
-import com.google.zxing.Result;
 import com.google.zxing.common.HybridBinarizer;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -75,11 +66,23 @@ public final class QrNavigationActivity extends AppCompatActivity {
             lens = lens == CameraSelector.LENS_FACING_BACK ?
                     CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
             handling.set(false);
-            startCamera();
+            ensureCameraPermission();
         });
         button(root, "🖼 อ่าน QR จากภาพ / LINE / แกลเลอรี", () -> gallery.launch("image/*"));
         button(root, "← กลับ", this::finish);
         setContentView(root);
+        Uri incomingImage = getIntent() == null ? null
+                : getIntent().getParcelableExtra(Intent.EXTRA_STREAM);
+        // A QR photo shared into Dorm Camera can be scanned directly without
+        // asking for camera permission or saving the file a second time.
+        if (incomingImage != null) {
+            scanGallery(incomingImage);
+        } else {
+            ensureCameraPermission();
+        }
+    }
+
+    private void ensureCameraPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) startCamera();
         else cameraPermission.launch(Manifest.permission.CAMERA);
@@ -138,7 +141,7 @@ public final class QrNavigationActivity extends AppCompatActivity {
             for (int x = 0; x < w; x++) luminance[y * w + x] =
                     buf.get(start + y * stride + x * pixelStride);
         }
-        return decode(new BinaryBitmap(new HybridBinarizer(
+        return QrImageDecoder.decode(new BinaryBitmap(new HybridBinarizer(
                 new PlanarYUVLuminanceSource(luminance, w, h, 0, 0, w, h, false))));
     }
 
@@ -146,35 +149,25 @@ public final class QrNavigationActivity extends AppCompatActivity {
         handling.set(true);
         worker.execute(() -> {
             String value = null;
-            try (InputStream stream = getContentResolver().openInputStream(uri)) {
-                BitmapFactory.Options opts = new BitmapFactory.Options();
-                opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                Bitmap b = BitmapFactory.decodeStream(stream, null, opts);
-                if (b != null) {
-                    int[] pixels = new int[b.getWidth() * b.getHeight()];
-                    b.getPixels(pixels, 0, b.getWidth(), 0, 0, b.getWidth(), b.getHeight());
-                    value = decode(new BinaryBitmap(new HybridBinarizer(
-                            new RGBLuminanceSource(b.getWidth(), b.getHeight(), pixels))));
-                    b.recycle();
-                }
-            } catch (Exception ignored) {}
+            String error = null;
+            try {
+                value = QrImageDecoder.decodeUri(this, uri);
+            } catch (Exception ex) {
+                error = ex.getMessage();
+            }
             String result = value;
+            String failure = error;
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
                 if (result == null) {
                     handling.set(false);
-                    Toast.makeText(this, "ไม่พบ QR ที่อ่านได้ในภาพ", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, failure == null
+                            ? "ไม่พบ QR ที่อ่านได้ในภาพ • ลองเลือกภาพที่ชัดกว่า"
+                            : "อ่าน QR ไม่สำเร็จ: " + failure,
+                            Toast.LENGTH_LONG).show();
                 } else showResult(result);
             });
         });
-    }
-
-    private String decode(BinaryBitmap bitmap) {
-        try {
-            Result result = new MultiFormatReader().decode(bitmap);
-            return result.getText();
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private void showResult(String raw) {
@@ -182,12 +175,13 @@ public final class QrNavigationActivity extends AppCompatActivity {
         if (place == null) {
             new AlertDialog.Builder(this).setTitle("อ่าน QR ได้ แต่ไม่ใช่พิกัด Google Maps")
                     .setMessage("เนื้อหา: " + raw.substring(0, Math.min(300, raw.length())))
-                    .setPositiveButton("สแกนอีกครั้ง", (d, w) -> handling.set(false))
-                    .setOnCancelListener(d -> handling.set(false)).show();
+                    .setPositiveButton("สแกนอีกครั้ง", (d, w) -> resumeScanner())
+                    .setOnCancelListener(d -> resumeScanner()).show();
             return;
         }
-        new AlertDialog.Builder(this).setTitle("พบพิกัดนำทาง")
-                .setMessage("พิกัด: " + place.latitude + ", " + place.longitude
+        new AlertDialog.Builder(this).setTitle("✓ พบพิกัดนำทางจาก QR")
+                .setMessage("สถานที่: " + place.title
+                        + "\nพิกัด: " + place.latitude + ", " + place.longitude
                         + "\n\nตรวจสอบปลายทางก่อนเปิด Google Maps")
                 .setPositiveButton("นำทาง Google Maps", (d, w) -> {
                     try {
@@ -196,10 +190,54 @@ public final class QrNavigationActivity extends AppCompatActivity {
                     } catch (Exception e) {
                         Toast.makeText(this, "ไม่พบแอปเปิดแผนที่", Toast.LENGTH_LONG).show();
                     }
-                    handling.set(false);
+                    resumeScanner();
                 })
-                .setNegativeButton("สแกนอีกครั้ง", (d, w) -> handling.set(false))
-                .setOnCancelListener(d -> handling.set(false)).show();
+                .setNeutralButton("บันทึกสถานที่", (d, w) -> saveQrLocation(place))
+                .setNegativeButton("สแกนอีกครั้ง", (d, w) -> resumeScanner())
+                .setOnCancelListener(d -> resumeScanner()).show();
+    }
+
+    private void saveQrLocation(SmartGpsLink.Parsed place) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("ชื่อสถานที่");
+        input.setText("ตำแหน่งจาก LINE".equals(place.title)
+                ? "สถานที่จาก QR" : place.title);
+        input.setSelectAllOnFocus(true);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("📍 บันทึกพิกัดจาก QR")
+                .setMessage("เก็บในเมนู สถานที่ของฉัน โดยไม่ต้องมีภาพต้นฉบับ")
+                .setView(input)
+                .setPositiveButton("บันทึก", null)
+                .setNegativeButton("ยกเลิก", (d, w) -> resumeScanner())
+                .setOnCancelListener(d -> resumeScanner())
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    String name = input.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        input.setError("กรุณาตั้งชื่อสถานที่");
+                        return;
+                    }
+                    try {
+                        SavedGpsPlaces.save(this, name, place.latitude, place.longitude);
+                        dialog.dismiss();
+                        resumeScanner();
+                        Toast.makeText(this, "✓ บันทึก GPS ในสถานที่ของฉันแล้ว", Toast.LENGTH_LONG).show();
+                    } catch (Exception ex) {
+                        Toast.makeText(this, "บันทึกพิกัดไม่สำเร็จ: " + ex.getMessage(),
+                                Toast.LENGTH_LONG).show();
+                    }
+                }));
+        dialog.show();
+    }
+
+    private void resumeScanner() {
+        handling.set(false);
+        if (provider == null && ContextCompat.checkSelfPermission(this,
+                Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            startCamera();
+        }
     }
 
     private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
