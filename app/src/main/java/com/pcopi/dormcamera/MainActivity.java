@@ -54,6 +54,8 @@ import androidx.camera.video.VideoRecordEvent;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.annotation.Nullable;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -86,6 +88,9 @@ public class MainActivity extends AppCompatActivity {
     private Button exposureResetButton;
     private Button exposureUpButton;
     private CameraTuningPanel cameraTuningPanel;
+    private View advancedCameraControls;
+    private Button cameraToolsTab;
+    private boolean advancedToolsExpanded;
     private Button flashButton;
     private Button folderButton;
     private Button explorerButton;
@@ -129,11 +134,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        applySafeSystemBarInsets();
 
         previewView = findViewById(R.id.previewView);
         statusText = findViewById(R.id.statusText);
         folderBanner = findViewById(R.id.folderBanner);
         zoomText = findViewById(R.id.zoomText);
+        advancedCameraControls = findViewById(R.id.advancedCameraControls);
+        cameraToolsTab = findViewById(R.id.cameraToolsTab);
+        cameraToolsTab.setOnClickListener(v -> toggleAdvancedControls());
+        setAdvancedControlsExpanded(false, false);
         captureButton = findViewById(R.id.captureButton);
         videoButton = findViewById(R.id.videoButton);
         videoPauseButton = findViewById(R.id.videoPauseButton);
@@ -240,6 +250,75 @@ public class MainActivity extends AppCompatActivity {
         } else {
             ActivityCompat.requestPermissions(this, requiredPermissions(), REQ_PERMISSIONS);
         }
+    }
+
+    /**
+     * Android 15+ targets draw behind system navigation/status bars. Keep a real
+     * safe area for Samsung's home gesture/pill, instead of placing the shutter
+     * and expanding tools on top of the navigation bar.
+     */
+    private void applySafeSystemBarInsets() {
+        if (Build.VERSION.SDK_INT < 35) return;
+        View root = findViewById(R.id.cameraRoot);
+        final int start = root.getPaddingLeft();
+        final int top = root.getPaddingTop();
+        final int end = root.getPaddingRight();
+        final int bottom = root.getPaddingBottom();
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+                            | WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(start + bars.left, top + bars.top,
+                    end + bars.right, bottom + bars.bottom);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(root);
+    }
+
+    private void toggleAdvancedControls() {
+        setAdvancedControlsExpanded(!advancedToolsExpanded, true);
+    }
+
+    /** Shutter, video, pause and switch always remain outside the folding block. */
+    private void setAdvancedControlsExpanded(boolean expanded, boolean animated) {
+        if (advancedCameraControls == null || cameraToolsTab == null) return;
+        advancedCameraControls.animate().cancel();
+        advancedToolsExpanded = expanded;
+        cameraToolsTab.setText(expanded ? "‹\nพับเมนู" : "☷\nเครื่องมือ");
+        cameraToolsTab.setContentDescription(expanded
+                ? "พับแถบเครื่องมือเพื่อขยายภาพกล้อง"
+                : "เปิดเมนูปรับแสง ซูม แสงสีไฟ และจัดการห้อง");
+        cameraToolsTab.setActivated(expanded);
+
+        if (expanded) {
+            advancedCameraControls.setVisibility(View.VISIBLE);
+            if (animated) {
+                advancedCameraControls.setAlpha(0f);
+                advancedCameraControls.animate().alpha(1f).setDuration(160L).start();
+            } else {
+                advancedCameraControls.setAlpha(1f);
+            }
+        } else if (animated && advancedCameraControls.getVisibility() == View.VISIBLE) {
+            advancedCameraControls.animate().alpha(0f).setDuration(130L)
+                    .withEndAction(() -> {
+                        if (!advancedToolsExpanded) {
+                            advancedCameraControls.setVisibility(View.GONE);
+                            advancedCameraControls.setAlpha(1f);
+                        }
+                    }).start();
+        } else {
+            advancedCameraControls.setVisibility(View.GONE);
+            advancedCameraControls.setAlpha(1f);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (advancedToolsExpanded) {
+            setAdvancedControlsExpanded(false, true);
+            return;
+        }
+        super.onBackPressed();
     }
 
     private int dp(int value) {
