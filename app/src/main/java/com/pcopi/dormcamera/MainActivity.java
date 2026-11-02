@@ -85,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
     private Button exposureDownButton;
     private Button exposureResetButton;
     private Button exposureUpButton;
+    private CameraTuningPanel cameraTuningPanel;
     private Button flashButton;
     private Button folderButton;
     private Button explorerButton;
@@ -157,6 +158,11 @@ public class MainActivity extends AppCompatActivity {
         shutterSound.load(MediaActionSound.SHUTTER_CLICK);
         updateShutterSoundUi();
 
+        cameraTuningPanel = new CameraTuningPanel(this, () -> {
+            selectedFlashMode = ImageCapture.FLASH_MODE_OFF;
+            applyFlashMode();
+            updateFlashUi();
+        });
         setCameraControlsEnabled(false);
 
         captureButton.setOnClickListener(v -> takePhoto());
@@ -249,6 +255,7 @@ public class MainActivity extends AppCompatActivity {
         exposureDownButton.setEnabled(enabled);
         exposureResetButton.setEnabled(enabled);
         exposureUpButton.setEnabled(enabled);
+        if (cameraTuningPanel != null) cameraTuningPanel.setCameraReady(enabled);
         flashButton.setEnabled(enabled);
         folderButton.setEnabled(enabled);
         explorerButton.setEnabled(enabled);
@@ -400,6 +407,7 @@ public class MainActivity extends AppCompatActivity {
             activeCamera.getCameraInfo().getZoomState().observe(this, this::updateZoomUi);
 
             setZoomRatio(1.0f);
+            cameraTuningPanel.bind(activeCamera);
             applyFlashMode();
             updateExposureUi();
             updateFlashUi();
@@ -417,6 +425,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         zoomText.setText(String.format(Locale.US, "%.1f×  •  แตะโฟกัส  •  บีบซูม", state.getZoomRatio()));
+        if (cameraTuningPanel != null) cameraTuningPanel.syncZoom(state);
     }
 
     private void setZoomRatio(float requestedRatio) {
@@ -499,6 +508,7 @@ public class MainActivity extends AppCompatActivity {
         Rational step = state.getExposureCompensationStep();
         float ev = index * step.floatValue();
         exposureResetButton.setText(String.format(Locale.US, "EV %+.1f", ev));
+        if (cameraTuningPanel != null) cameraTuningPanel.syncExposure(state);
         boolean supported = min != 0 || max != 0;
         exposureDownButton.setEnabled(supported && index > min && activeRecording == null);
         exposureUpButton.setEnabled(supported && index < max && activeRecording == null);
@@ -851,6 +861,7 @@ public class MainActivity extends AppCompatActivity {
         exposureDownButton.setEnabled(false);
         exposureResetButton.setEnabled(false);
         exposureUpButton.setEnabled(false);
+        cameraTuningPanel.setRecording(true);
         videoButton.setEnabled(true);
         videoButton.setText("■ หยุด");
 
@@ -865,6 +876,7 @@ public class MainActivity extends AppCompatActivity {
             activeRecording = null;
             recordingPaused = false;
             pauseTransitionPending = false;
+            cameraTuningPanel.setRecording(false);
             videoPauseButton.setVisibility(View.INVISIBLE);
             videoPauseButton.setEnabled(false);
             captureButton.setContentDescription("ถ่ายภาพ");
@@ -1012,6 +1024,7 @@ public class MainActivity extends AppCompatActivity {
                 activeRecording.close();
                 activeRecording = null;
             }
+            cameraTuningPanel.setRecording(false);
             if (activeCamera != null && activeCamera.getCameraInfo().hasFlashUnit()) {
                 activeCamera.getCameraControl().enableTorch(false);
             }
