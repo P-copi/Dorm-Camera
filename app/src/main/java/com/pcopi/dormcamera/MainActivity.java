@@ -75,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_LOCATION = 1003;
     private static final String PREFS_CAMERA = "camera_settings";
     private static final String PREF_SHUTTER_SOUND = "shutter_sound_enabled";
+    private static final String PREF_TOOLS_EXPANDED = "tools_expanded";
 
     private PreviewView previewView;
     private TextView statusText;
@@ -163,6 +164,7 @@ public class MainActivity extends AppCompatActivity {
         locationHelper = new LocationHelper(this);
         folderStore = new FolderStore(this);
         cameraPreferences = getSharedPreferences(PREFS_CAMERA, MODE_PRIVATE);
+        setAdvancedControlsExpanded(cameraPreferences.getBoolean(PREF_TOOLS_EXPANDED, false), false);
         shutterSoundEnabled = cameraPreferences.getBoolean(PREF_SHUTTER_SOUND, true);
         shutterSound = new MediaActionSound();
         shutterSound.load(MediaActionSound.SHUTTER_CLICK);
@@ -284,6 +286,10 @@ public class MainActivity extends AppCompatActivity {
         if (advancedCameraControls == null || cameraToolsTab == null) return;
         advancedCameraControls.animate().cancel();
         advancedToolsExpanded = expanded;
+        if (animated && cameraPreferences != null) {
+            cameraPreferences.edit().putBoolean(PREF_TOOLS_EXPANDED, expanded).apply();
+            cameraToolsTab.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
+        }
         cameraToolsTab.setText(expanded ? "‹\nพับเมนู" : "☷\nเครื่องมือ");
         cameraToolsTab.setContentDescription(expanded
                 ? "พับแถบเครื่องมือเพื่อขยายภาพกล้อง"
