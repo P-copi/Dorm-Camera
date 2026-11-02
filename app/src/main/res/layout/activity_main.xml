@@ -483,6 +483,7 @@
             android:layout_width="match_parent"
             android:layout_height="96dp"
             android:layout_marginTop="8dp"
+            android:layout_marginBottom="30dp"
             android:orientation="horizontal"
             android:gravity="center">
 
