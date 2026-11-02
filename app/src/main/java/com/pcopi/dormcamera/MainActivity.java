@@ -80,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView zoomText;
     private Button captureButton;
     private Button videoButton;
+    private Button videoPauseButton;
     private Button switchButton;
     private Button exposureDownButton;
     private Button exposureResetButton;
@@ -98,6 +99,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageCapture imageCapture;
     private VideoCapture<Recorder> videoCapture;
     private Recording activeRecording;
+    private boolean recordingPaused;
+    private boolean pauseTransitionPending;
+    private long recordedTimeAtPauseMs;
     private Camera activeCamera;
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private ScaleGestureDetector scaleGestureDetector;
@@ -131,6 +135,7 @@ public class MainActivity extends AppCompatActivity {
         zoomText = findViewById(R.id.zoomText);
         captureButton = findViewById(R.id.captureButton);
         videoButton = findViewById(R.id.videoButton);
+        videoPauseButton = findViewById(R.id.videoPauseButton);
         switchButton = findViewById(R.id.switchButton);
         exposureDownButton = findViewById(R.id.exposureDownButton);
         exposureResetButton = findViewById(R.id.exposureResetButton);
@@ -156,6 +161,7 @@ public class MainActivity extends AppCompatActivity {
 
         captureButton.setOnClickListener(v -> takePhoto());
         videoButton.setOnClickListener(v -> toggleVideoRecording());
+        videoPauseButton.setOnClickListener(v -> toggleVideoPause());
         switchButton.setOnClickListener(v -> switchCamera());
         exposureDownButton.setOnClickListener(v -> adjustExposure(-1));
         exposureResetButton.setOnClickListener(v -> resetExposure());
@@ -237,6 +243,8 @@ public class MainActivity extends AppCompatActivity {
     private void setCameraControlsEnabled(boolean enabled) {
         captureButton.setEnabled(enabled);
         videoButton.setEnabled(enabled);
+        if (videoPauseButton != null) videoPauseButton.setEnabled(
+                enabled && activeRecording != null && !pauseTransitionPending);
         switchButton.setEnabled(enabled);
         exposureDownButton.setEnabled(enabled);
         exposureResetButton.setEnabled(enabled);
@@ -576,20 +584,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void takePhoto() {
-        if (activeRecording != null) {
-            Toast.makeText(this, "หยุดวิดีโอก่อนถ่ายภาพ", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        // CameraX binds ImageCapture and VideoCapture together.
+        // A JPEG shot must not stop, pause or rebind the active video recorder.
+        final boolean duringVideo = activeRecording != null;
         if (imageCapture == null) {
             Toast.makeText(this, "กล้องยังไม่พร้อม", Toast.LENGTH_SHORT).show();
             return;
         }
         if (!StorageGuard.checkBeforePhoto(this)) return;
-        // Never silently produce a location-less photo: acquire a fresh fix first.
-        if (!ensureFreshGpsForCapture(false)) return;
+        // A recording must retain a working Stop button even if GPS is briefly
+        // unavailable. For standalone photos, the existing GPS wait still applies.
+        if (!duringVideo && !ensureFreshGpsForCapture(false)) return;
         final Location photoFix = prepareLocationForCapture();
         if (photoFix == null) {
-            waitForGps(false);
+            if (duringVideo) {
+                refreshLocation();
+                Toast.makeText(this, "ยังไม่พบ GPS ใหม่ • วิดีโอยังบันทึกต่อ ลองถ่ายภาพอีกครั้ง",
+                        Toast.LENGTH_LONG).show();
+            } else {
+                waitForGps(false);
+            }
             return;
         }
 
@@ -616,16 +630,19 @@ public class MainActivity extends AppCompatActivity {
         if (previewView.getDisplay() != null) {
             imageCapture.setTargetRotation(previewView.getDisplay().getRotation());
         }
-        statusText.setText("กำลังถ่ายภาพและตรวจ GPS → " + roomLabel);
+        if (!duringVideo) statusText.setText("กำลังถ่ายภาพและตรวจ GPS → " + roomLabel);
         captureButton.setEnabled(false);
-        playShutterSoundIfEnabled();
+        // Do not play the shutter click into the active video audio track.
+        if (!duringVideo) playShutterSoundIfEnabled();
 
         try {
             imageCapture.takePicture(options, ContextCompat.getMainExecutor(this),
                     new ImageCapture.OnImageSavedCallback() {
                 @Override
                 public void onImageSaved(@NonNull ImageCapture.OutputFileResults result) {
-                    statusText.setText("กำลังยืนยัน GPS ในภาพก่อนบันทึก...");
+                    if (!duringVideo) {
+                        statusText.setText("กำลังยืนยัน GPS ในภาพก่อนบันทึก...");
+                    }
                     new Thread(() -> {
                         CapturePhotoSaver.Result published = null;
                         String error = null;
@@ -648,12 +665,17 @@ public class MainActivity extends AppCompatActivity {
                                         + " • ไม่ได้บันทึกภาพที่ไม่มี GPS ลงคลัง");
                                 return;
                             }
-                            statusText.setText("บันทึกภาพพร้อม GPS แล้ว ✓");
-                            showSaveBanner("ภาพพร้อม GPS ✓", roomLabel);
+                            if (!duringVideo || activeRecording == null) {
+                                statusText.setText("บันทึกภาพพร้อม GPS แล้ว ✓");
+                            }
+                            showSaveBanner(duringVideo ? "ภาพระหว่างวิดีโอ • GPS ✓"
+                                    : "ภาพพร้อม GPS ✓", roomLabel);
                             if (latestMediaView != null) {
                                 latestMediaView.postDelayed(latestMediaView::refresh, 450L);
                             }
-                            statusText.postDelayed(MainActivity.this::updateCameraStatus, 1800L);
+                            if (!duringVideo || activeRecording == null) {
+                                statusText.postDelayed(MainActivity.this::updateCameraStatus, 1800L);
+                            }
                         });
                     }, "dorm-capture-verify-gps").start();
                 }
@@ -741,7 +763,16 @@ public class MainActivity extends AppCompatActivity {
         if (activeRecording != null) {
             videoButton.setEnabled(false);
             videoButton.setText("กำลังหยุด...");
-            activeRecording.stop();
+            videoPauseButton.setEnabled(false);
+            pauseTransitionPending = true;
+            try {
+                activeRecording.stop();
+            } catch (IllegalStateException e) {
+                videoButton.setEnabled(true);
+                videoPauseButton.setEnabled(true);
+                pauseTransitionPending = false;
+                showError("หยุดวิดีโอไม่สำเร็จ: " + e.getMessage());
+            }
             return;
         }
         if (videoCapture == null) {
@@ -801,7 +832,16 @@ public class MainActivity extends AppCompatActivity {
             activeCamera.getCameraControl().enableTorch(selectedFlashMode == ImageCapture.FLASH_MODE_ON);
         }
 
-        captureButton.setEnabled(false);
+        // Keep ImageCapture available while VideoCapture is active.
+        captureButton.setEnabled(true);
+        captureButton.setContentDescription("ถ่ายภาพนิ่งพร้อม GPS ระหว่างวิดีโอ");
+        videoPauseButton.setVisibility(View.VISIBLE);
+        videoPauseButton.setEnabled(false);
+        videoPauseButton.setText("Ⅱ");
+        videoPauseButton.setContentDescription("หยุดบันทึกวิดีโอชั่วคราว");
+        recordingPaused = false;
+        pauseTransitionPending = false;
+        recordedTimeAtPauseMs = 0L;
         switchButton.setEnabled(false);
         folderButton.setEnabled(false);
         explorerButton.setEnabled(false);
@@ -815,16 +855,69 @@ public class MainActivity extends AppCompatActivity {
         videoButton.setText("■ หยุด");
 
         final boolean hasGps = videoLocation != null;
-        activeRecording = pendingRecording.start(
-                ContextCompat.getMainExecutor(this),
-                event -> handleVideoEvent(event, fileName, displayPath, roomLabel, hasGps)
-        );
+        try {
+            activeRecording = pendingRecording.start(
+                    ContextCompat.getMainExecutor(this),
+                    event -> handleVideoEvent(event, fileName, displayPath, roomLabel, hasGps)
+            );
+        } catch (Exception e) {
+            // Restore the entire camera UI if the recorder cannot start.
+            activeRecording = null;
+            recordingPaused = false;
+            pauseTransitionPending = false;
+            videoPauseButton.setVisibility(View.INVISIBLE);
+            videoPauseButton.setEnabled(false);
+            captureButton.setContentDescription("ถ่ายภาพ");
+            setCameraControlsEnabled(true);
+            updateFlashUi();
+            updateExposureUi();
+            videoButton.setText("● วิดีโอ");
+            showError("เปิดการบันทึกวิดีโอไม่สำเร็จ: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Pause and resume the same CameraX Recording: no split/merged MP4 files.
+     * The pause button is only enabled after CameraX confirms its Start event.
+     */
+    private void toggleVideoPause() {
+        Recording recording = activeRecording;
+        if (recording == null || pauseTransitionPending || !videoPauseButton.isEnabled()) return;
+        pauseTransitionPending = true;
+        videoPauseButton.setEnabled(false);
+        videoPauseButton.setText("…");
+        try {
+            if (recordingPaused) recording.resume();
+            else recording.pause();
+        } catch (IllegalStateException e) {
+            pauseTransitionPending = false;
+            videoPauseButton.setEnabled(true);
+            videoPauseButton.setText(recordingPaused ? "▶" : "Ⅱ");
+            showError("พัก/ถ่ายต่อวิดีโอไม่สำเร็จ: " + e.getMessage());
+        }
     }
 
     private void startRecordingIndicator() {
         if (recordingTimer == null) return;
+        recordingTimer.setFormat("●  REC  %s");
         recordingTimer.setBase(SystemClock.elapsedRealtime());
+        recordedTimeAtPauseMs = 0L;
         recordingTimer.setVisibility(View.VISIBLE);
+        recordingTimer.start();
+    }
+
+    private void pauseRecordingIndicator() {
+        if (recordingTimer == null) return;
+        recordedTimeAtPauseMs = Math.max(0L,
+                SystemClock.elapsedRealtime() - recordingTimer.getBase());
+        recordingTimer.stop();
+        recordingTimer.setFormat("Ⅱ  PAUSE  %s");
+    }
+
+    private void resumeRecordingIndicator() {
+        if (recordingTimer == null) return;
+        recordingTimer.setBase(SystemClock.elapsedRealtime() - recordedTimeAtPauseMs);
+        recordingTimer.setFormat("●  REC  %s");
         recordingTimer.start();
     }
 
@@ -832,6 +925,7 @@ public class MainActivity extends AppCompatActivity {
         if (recordingTimer == null) return;
         recordingTimer.stop();
         recordingTimer.setVisibility(View.GONE);
+        recordingTimer.setFormat("●  REC  %s");
     }
 
     private void showSaveBanner(String message, String roomLabel) {
@@ -871,14 +965,45 @@ public class MainActivity extends AppCompatActivity {
             boolean hasGps
     ) {
         if (event instanceof VideoRecordEvent.Start) {
+            recordingPaused = false;
+            pauseTransitionPending = false;
+            videoPauseButton.setVisibility(View.VISIBLE);
+            videoPauseButton.setText("Ⅱ");
+            videoPauseButton.setEnabled(true);
             startRecordingIndicator();
             String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
             statusText.setText("กำลังบันทึก • " + side + " → " + roomLabel + (hasGps ? "  •  GPS ✓" : ""));
             return;
         }
+        if (event instanceof VideoRecordEvent.Pause) {
+            recordingPaused = true;
+            pauseTransitionPending = false;
+            videoPauseButton.setText("▶");
+            videoPauseButton.setContentDescription("ถ่ายวิดีโอต่อ");
+            videoPauseButton.setEnabled(true);
+            pauseRecordingIndicator();
+            statusText.setText("Ⅱ พักวิดีโอ • กด ▶ เพื่อถ่ายต่อเป็นไฟล์เดิม • GPS ✓");
+            return;
+        }
+        if (event instanceof VideoRecordEvent.Resume) {
+            recordingPaused = false;
+            pauseTransitionPending = false;
+            videoPauseButton.setText("Ⅱ");
+            videoPauseButton.setContentDescription("หยุดบันทึกวิดีโอชั่วคราว");
+            videoPauseButton.setEnabled(true);
+            resumeRecordingIndicator();
+            statusText.setText("● กำลังถ่ายวิดีโอต่อในไฟล์เดิม • GPS ✓");
+            return;
+        }
 
         if (event instanceof VideoRecordEvent.Finalize) {
             stopRecordingIndicator();
+            recordingPaused = false;
+            pauseTransitionPending = false;
+            videoPauseButton.setEnabled(false);
+            videoPauseButton.setVisibility(View.INVISIBLE);
+            videoPauseButton.setText("Ⅱ");
+            captureButton.setContentDescription("ถ่ายภาพ");
             VideoRecordEvent.Finalize finalizeEvent = (VideoRecordEvent.Finalize) event;
             File legacyVideoFile = currentLegacyVideoFile;
             currentLegacyVideoFile = null;
@@ -1205,7 +1330,10 @@ public class MainActivity extends AppCompatActivity {
         String side = lensFacing == CameraSelector.LENS_FACING_BACK ? "กล้องหลัง" : "กล้องหน้า";
         String folder = FolderStore.displayName(folderStore.getCurrentFolder());
         String lock = folderStore.isLocked() ? "  🔒" : "";
-        statusText.setText(side + "  •  " + gpsStatus);
+        // Keep recording/pause state visible during continuous GPS callbacks.
+        if (activeRecording == null) {
+            statusText.setText(side + "  •  " + gpsStatus);
+        }
         if (folderBanner != null) {
             folderBanner.setText("📁  " + folder + lock + "   ›");
         }
