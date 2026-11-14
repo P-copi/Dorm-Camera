@@ -2,7 +2,7 @@ name: Build Dorm Camera APK
 
 on:
   push:
-    branches: [ main, dev-v0.2.22 ]
+    branches: [ main, dev-v0.2.22, dev-v0.2.27 ]
   workflow_dispatch:
 
 jobs:
