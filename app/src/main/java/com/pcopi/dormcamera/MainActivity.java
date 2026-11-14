@@ -81,6 +81,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView statusText;
     private TextView folderBanner;
     private TextView zoomText;
+    private TextView appVersionText;
+    private final Runnable hideZoomHint = () -> {
+        if (zoomText != null) zoomText.setVisibility(View.GONE);
+    };
     private Button captureButton;
     private Button videoButton;
     private Button videoPauseButton;
@@ -141,6 +145,13 @@ public class MainActivity extends AppCompatActivity {
         statusText = findViewById(R.id.statusText);
         folderBanner = findViewById(R.id.folderBanner);
         zoomText = findViewById(R.id.zoomText);
+        appVersionText = findViewById(R.id.appVersionText);
+        try {
+            String version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            appVersionText.setText("Dome Camera  •  v" + version);
+        } catch (PackageManager.NameNotFoundException ignored) {
+            appVersionText.setText("Dome Camera");
+        }
         advancedCameraControls = findViewById(R.id.advancedCameraControls);
         cameraToolsTab = findViewById(R.id.cameraToolsTab);
         cameraToolsTab.setOnClickListener(v -> toggleAdvancedControls());
@@ -505,12 +516,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateZoomUi(ZoomState state) {
-        if (state == null) {
-            zoomText.setText("ซูม --  •  แตะโฟกัส");
-            return;
+        if (state != null && cameraTuningPanel != null) cameraTuningPanel.syncZoom(state);
+        if (state != null && gestureWasScaling) {
+            showTransientZoomHint(String.format(Locale.US, "%.1f×", state.getZoomRatio()));
         }
-        zoomText.setText(String.format(Locale.US, "%.1f×  •  แตะโฟกัส  •  บีบซูม", state.getZoomRatio()));
-        if (cameraTuningPanel != null) cameraTuningPanel.syncZoom(state);
+    }
+
+    private void showTransientZoomHint(String message) {
+        if (zoomText == null) return;
+        zoomText.removeCallbacks(hideZoomHint);
+        zoomText.setText(message);
+        zoomText.setVisibility(View.VISIBLE);
+        zoomText.postDelayed(hideZoomHint, 1200L);
     }
 
     private void setZoomRatio(float requestedRatio) {
@@ -533,14 +550,14 @@ public class MainActivity extends AppCompatActivity {
             final Camera focusCamera = activeCamera;
             final ListenableFuture<androidx.camera.core.FocusMeteringResult> focusResult =
                     focusCamera.getCameraControl().startFocusAndMetering(action);
-            zoomText.setText("กำลังโฟกัส...");
+            showTransientZoomHint("กำลังโฟกัส...");
             focusResult.addListener(() -> {
                 if (activeCamera != focusCamera) return;
                 try {
-                    zoomText.setText(focusResult.get().isFocusSuccessful()
+                    showTransientZoomHint(focusResult.get().isFocusSuccessful()
                             ? "โฟกัสสำเร็จ ✓" : "กำลังปรับโฟกัสอัตโนมัติ");
                 } catch (Exception e) {
-                    zoomText.setText("โฟกัสไม่สำเร็จ • แตะอีกครั้ง");
+                    showTransientZoomHint("โฟกัสไม่สำเร็จ • แตะอีกครั้ง");
                 }
                 zoomText.postDelayed(() -> {
                     if (activeCamera == focusCamera)
@@ -684,7 +701,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         setCameraControlsEnabled(false);
-        zoomText.setText("กำลังสลับกล้อง...");
+        showTransientZoomHint("กำลังสลับกล้อง...");
         lensFacing = lensFacing == CameraSelector.LENS_FACING_BACK
                 ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
         bindCameraUseCases();
