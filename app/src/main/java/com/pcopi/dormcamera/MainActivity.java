@@ -198,6 +198,9 @@ public class MainActivity extends AppCompatActivity {
         flashButton.setOnClickListener(v -> cycleFlashMode());
         folderButton.setOnClickListener(v -> showFolderMenu());
         explorerButton.setOnClickListener(v -> openExplorer());
+        findViewById(R.id.quickFlashButton).setOnClickListener(v -> flashButton.performClick());
+        findViewById(R.id.quickGridButton).setOnClickListener(v -> findViewById(R.id.gridButton).performClick());
+        findViewById(R.id.quickExplorerButton).setOnClickListener(v -> explorerButton.performClick());
         shutterSoundButton.setOnClickListener(v -> toggleShutterSound());
         folderBanner.setOnClickListener(v -> showQuickFolderDialog());
         folderBanner.setOnLongClickListener(v -> {
