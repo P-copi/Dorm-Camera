@@ -100,12 +100,12 @@ public final class FolderStore {
 
     @NonNull
     public static String pictureRelativePath(@NonNull String folder) {
-        return buildRelativePath(Environment.DIRECTORY_PICTURES, folder);
+        return buildRelativePath(Environment.DIRECTORY_DCIM, folder);
     }
 
     @NonNull
     public static String videoRelativePath(@NonNull String folder) {
-        return buildRelativePath(Environment.DIRECTORY_MOVIES, folder);
+        return buildRelativePath(Environment.DIRECTORY_DCIM, folder);
     }
 
     @NonNull
@@ -123,7 +123,7 @@ public final class FolderStore {
     @NonNull
     public static File legacyPictureDir(@NonNull String folder) {
         File root = new File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
                 PUBLIC_FOLDER
         );
         return folder.isEmpty() ? root : new File(root, folder);
@@ -132,7 +132,7 @@ public final class FolderStore {
     @NonNull
     public static File legacyVideoDir(@NonNull String folder) {
         File root = new File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
                 PUBLIC_FOLDER
         );
         return folder.isEmpty() ? root : new File(root, folder);
