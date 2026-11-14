@@ -23,7 +23,7 @@ import java.io.OutputStream;
 /**
  * Never publish a captured JPEG until the photo has verified GPS EXIF.
  * CameraX first writes to an app-owned private JPEG; the verified bytes are
- * copied without recompression into the selected Pictures/DormCamera folder.
+ * copied without recompression into the selected DCIM/DormCamera folder.
  */
 public final class CapturePhotoSaver {
     private CapturePhotoSaver() {}
