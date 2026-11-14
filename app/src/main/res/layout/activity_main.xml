@@ -6,12 +6,23 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#050506"
-    android:paddingTop="2dp">
+    android:paddingTop="0dp">
+
+    <TextView
+        android:id="@+id/appVersionText"
+        android:layout_width="match_parent"
+        android:layout_height="22dp"
+        android:gravity="center_vertical|start"
+        android:paddingStart="14dp"
+        android:text="Dome Camera  •  v0.2.28"
+        android:textColor="#AFC2D1"
+        android:textSize="10sp"
+        android:includeFontPadding="false" />
 
     <com.pcopi.dormcamera.PressFeedbackButton
         android:id="@+id/folderBanner"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="32dp"
         android:layout_marginStart="18dp"
         android:layout_marginEnd="18dp"
         android:layout_marginTop="2dp"
@@ -22,7 +33,7 @@
         android:text="📁  หลัก   ›"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="15sp"
+        android:textSize="13sp"
         android:textStyle="bold"
         android:fontFamily="sans-serif-medium"
         android:background="@drawable/bg_folder_banner"
@@ -32,10 +43,10 @@
     <com.pcopi.dormcamera.CameraStatusTextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
-        android:layout_height="26dp"
+        android:layout_height="20dp"
         android:layout_gravity="center_horizontal"
-        android:layout_marginTop="3dp"
-        android:layout_marginBottom="3dp"
+        android:layout_marginTop="1dp"
+        android:layout_marginBottom="1dp"
         android:gravity="center"
         android:minWidth="190dp"
         android:paddingStart="11dp"
@@ -51,9 +62,9 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginStart="6dp"
-        android:layout_marginEnd="6dp"
-        android:layout_marginBottom="5dp"
+        android:layout_marginStart="2dp"
+        android:layout_marginEnd="2dp"
+        android:layout_marginBottom="2dp"
         android:background="@drawable/bg_preview_frame"
         android:clipToOutline="true">
 
@@ -177,10 +188,11 @@
             android:gravity="center"
             android:paddingStart="13dp"
             android:paddingEnd="13dp"
-            android:text="1.0×  •  แตะโฟกัส  •  บีบซูม"
+            android:text="1.0×"
             android:textColor="#FFFFFF"
             android:textSize="11sp"
-            android:background="@drawable/bg_info_chip" />
+            android:background="@drawable/bg_info_chip"
+            android:visibility="gone" />
 
         <!-- One compact side handle remains visible while advanced tools are folded. -->
         <com.pcopi.dormcamera.PressFeedbackButton
@@ -481,9 +493,9 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="96dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="30dp"
+            android:layout_height="92dp"
+            android:layout_marginTop="3dp"
+            android:layout_marginBottom="8dp"
             android:orientation="horizontal"
             android:gravity="center">
 
