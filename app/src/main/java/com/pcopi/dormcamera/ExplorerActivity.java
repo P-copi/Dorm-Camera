@@ -251,6 +251,9 @@ public class ExplorerActivity extends AppCompatActivity {
                 items.addAll(loaded);
                 adapter.notifyDataSetChanged();
                 updateSelectionStatus();
+                if (loaded.isEmpty() && !all) {
+                    countText.setText("ไม่พบภาพในโฟลเดอร์นี้ • กดรีเฟรชเพื่อตรวจสอบไฟล์และสิทธิ์");
+                }
             });
         }).start();
     }
