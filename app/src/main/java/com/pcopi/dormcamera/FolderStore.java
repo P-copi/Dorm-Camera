@@ -76,6 +76,25 @@ public final class FolderStore {
         editor.apply();
     }
 
+    /** Reconcile cached folder labels with directories verified on disk.
+     *  This only changes app preferences and never deletes media or folders. */
+    public void reconcileKnownFolders(@NonNull Set<String> discovered) {
+        Set<String> old = new HashSet<>(prefs.getStringSet(KEY_KNOWN, Collections.emptySet()));
+        Set<String> updated = new HashSet<>();
+        for (String folder : discovered) {
+            String safe = normalizePath(folder);
+            if (!safe.isEmpty()) updated.add(safe);
+        }
+        // Keep a registered folder if it contains indexed media or cannot be
+        // verified externally. The caller supplies only confirmed paths.
+        for (String folder : old) {
+            String safe = normalizePath(folder);
+            if (safe.isEmpty() || updated.contains(safe)) continue;
+            if (legacyPictureDir(safe).exists()) updated.add(safe);
+        }
+        prefs.edit().putStringSet(KEY_KNOWN, updated).apply();
+    }
+
     /** Remove only an already verified empty folder registration. Never remove descendants. */
     public boolean removeEmptyFolder(@NonNull String folder) {
         String path = normalizePath(folder);
@@ -111,7 +130,7 @@ public final class FolderStore {
         value = value.replaceAll("\\s+", " ");
         while (value.startsWith(".")) value = value.substring(1).trim();
         while (value.endsWith(".")) value = value.substring(0, value.length() - 1).trim();
-        if (value.length() > 48) value = value.substring(0, 48).trim();
+        // Keep full existing directory names; truncation caused media path mismatches.
         return value;
     }
 
