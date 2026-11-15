@@ -341,11 +341,12 @@ public class ExplorerActivity extends AppCompatActivity {
     private void showFolderActions(String path) {
         new AlertDialog.Builder(this)
                 .setTitle("📁 " + FolderStore.displayName(path))
-                .setItems(new String[]{"เปิดโฟลเดอร์", "ดูภาพในโฟลเดอร์นี้", "＋ สร้างซับโฟลเดอร์", "เปลี่ยนชื่อโฟลเดอร์", "ใช้เป็นโฟลเดอร์ถ่ายภาพ"}, (d, which) -> {
+                .setItems(new String[]{"เปิดโฟลเดอร์", "ดูภาพในโฟลเดอร์นี้", "＋ สร้างซับโฟลเดอร์", "เปลี่ยนชื่อโฟลเดอร์", "ใช้เป็นโฟลเดอร์ถ่ายภาพ", "ลบโฟลเดอร์ว่าง"}, (d, which) -> {
                     if (which == 0) { browsingFolder = path; showFolderGallery(); }
                     else if (which == 1) { browsingFolder = path; showAllFolders = false; recentOnly = false; loadMedia(); }
                     else if (which == 2) { browsingFolder = path; createExplorerSubfolder(); }
                     else if (which == 3) renameExplorerFolder(path);
+                    else if (which == 5) confirmDeleteEmptyFolder(path);
                     else {
                         if (folderStore.isLocked()) Toast.makeText(this, "กรุณาปลดล็อกโฟลเดอร์ในหน้ากล้องก่อน", Toast.LENGTH_LONG).show();
                         else { folderStore.setCurrentFolder(path); Toast.makeText(this, "เลือกโฟลเดอร์บันทึกแล้ว", Toast.LENGTH_SHORT).show(); }
@@ -353,6 +354,56 @@ public class ExplorerActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("ปิด", null)
                 .show();
+    }
+
+    private void confirmDeleteEmptyFolder(String path) {
+        if (path.isEmpty()) return;
+        new AlertDialog.Builder(this)
+                .setTitle("ลบโฟลเดอร์ว่าง")
+                .setMessage("ลบเฉพาะโฟลเดอร์ที่ไม่มีภาพ วิดีโอ หรือโฟลเดอร์ย่อย\\n" + FolderStore.displayName(path) + "\\nไม่มีการลบไฟล์ภาพ")
+                .setPositiveButton("ตรวจสอบและลบ", (dialog, which) -> {
+                    if (folderStore.isLocked() || path.equals(folderStore.getCurrentFolder())) {
+                        Toast.makeText(this, "โฟลเดอร์กำลังใช้งานหรือถูกล็อก ไม่อนุญาตให้ลบ", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    for (String known : folderStore.getKnownFolders()) {
+                        if (known.startsWith(path + "/")) {
+                            Toast.makeText(this, "มีซับโฟลเดอร์อยู่ ไม่อนุญาตให้ลบ", Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                    }
+                    new Thread(() -> {
+                        boolean safe = true;
+                        String prefix = FolderStore.pictureRelativePath(path);
+                        for (Uri collection : new Uri[]{MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media.EXTERNAL_CONTENT_URI}) {
+                            try (Cursor cursor = getContentResolver().query(collection,
+                                    new String[]{MediaStore.MediaColumns._ID},
+                                    MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?",
+                                    new String[]{prefix + "%"}, null)) {
+                                if (cursor == null || cursor.moveToFirst()) safe = false;
+                            } catch (Exception e) { safe = false; }
+                        }
+                        File directory = FolderStore.legacyPictureDir(path);
+                        File[] children = directory.listFiles();
+                        if (directory.exists() && (children == null || children.length != 0)) safe = false;
+                        final boolean verifiedEmpty = safe;
+                        runOnUiThread(() -> {
+                            if (!verifiedEmpty) {
+                                Toast.makeText(this, "โฟลเดอร์มีข้อมูลหรือไม่สามารถตรวจสอบได้ จึงไม่ลบ", Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            if (directory.exists() && !directory.delete()) {
+                                Toast.makeText(this, "ลบโฟลเดอร์ในเครื่องไม่สำเร็จ", Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            folderStore.removeEmptyFolder(path);
+                            if (browsingFolder.equals(path)) browsingFolder = FolderStore.parentPath(path);
+                            showFolderGallery();
+                            Toast.makeText(this, "ลบโฟลเดอร์ว่างแล้ว", Toast.LENGTH_SHORT).show();
+                        });
+                    }).start();
+                })
+                .setNegativeButton("ยกเลิก", null).show();
     }
 
     private void renameExplorerFolder(String path) {
@@ -478,6 +529,8 @@ public class ExplorerActivity extends AppCompatActivity {
         intent.putExtra(PreviewActivity.EXTRA_URI, item.uri.toString());
         intent.putExtra(PreviewActivity.EXTRA_MIME, item.mimeType);
         intent.putExtra(PreviewActivity.EXTRA_NAME, item.name);
+        intent.putExtra(PreviewActivity.EXTRA_FOLDER, browsingFolder);
+        intent.putExtra(PreviewActivity.EXTRA_ALL_FOLDERS, showAllFolders);
         startActivity(intent);
     }
 
@@ -912,7 +965,9 @@ public class ExplorerActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (adapter != null && hasLegacyReadPermission()) loadMedia();
+        if (adapter != null && hasLegacyReadPermission()) {
+            if (folderGallery) showFolderGallery(); else loadMedia();
+        }
     }
 
     @Override
