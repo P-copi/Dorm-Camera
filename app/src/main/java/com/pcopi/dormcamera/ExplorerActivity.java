@@ -140,6 +140,7 @@ public class ExplorerActivity extends AppCompatActivity {
             List<String> paths = new ArrayList<>();
             File root = FolderStore.legacyPictureDir("");
             collectMediaPaths(root, paths, 0);
+            discoverImportedFolders(root, "", 0);
             if (paths.isEmpty()) {
                 runOnUiThread(() -> { if (folderGallery) showFolderGallery(); else loadMedia(); });
                 return;
@@ -156,6 +157,19 @@ public class ExplorerActivity extends AppCompatActivity {
                         }
                     });
         }).start();
+    }
+
+    private void discoverImportedFolders(File directory, String relative, int depth) {
+        if (depth > 8) return;
+        File[] children = directory.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            if (!child.isDirectory() || child.getName().startsWith(".")) continue;
+            String next = FolderStore.childPath(relative, child.getName());
+            if (next.isEmpty() || next.equals(relative)) continue;
+            folderStore.addFolder(next);
+            discoverImportedFolders(child, next, depth + 1);
+        }
     }
 
     private void collectMediaPaths(File folder, List<String> paths, int depth) {
