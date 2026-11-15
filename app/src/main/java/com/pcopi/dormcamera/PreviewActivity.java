@@ -49,6 +49,7 @@ public class PreviewActivity extends AppCompatActivity {
         @Override protected int sizeOf(String key, Bitmap bitmap) { return bitmap.getByteCount() / 1024; }
     };
     private int imageRequest = 0;
+    private int slideDirection = 0;
     private String initialUriText;
 
     private float swipeStartX;
@@ -324,7 +325,14 @@ public class PreviewActivity extends AppCompatActivity {
         imageView.animate().cancel();
         imageView.setImageBitmap(bitmap);
         imageView.post(imageView::resetZoom);
-        imageView.animate().alpha(1f).setDuration(160).start();
+        int direction = slideDirection;
+        slideDirection = 0;
+        if (direction != 0) {
+            imageView.setTranslationX(direction * imageView.getWidth() * 0.35f);
+            imageView.setAlpha(0.75f);
+            imageView.animate().translationX(0f).alpha(1f).setDuration(220)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        } else imageView.animate().alpha(1f).setDuration(120).start();
     }
 
     private void preloadNeighbors() {
@@ -363,8 +371,15 @@ public class PreviewActivity extends AppCompatActivity {
             Toast.makeText(this, "ถึงรายการสุดท้ายแล้ว", Toast.LENGTH_SHORT).show();
             return;
         }
-        currentIndex = target;
-        loadCurrentItem();
+        slideDirection = delta > 0 ? 1 : -1;
+        imageView.animate().cancel();
+        imageView.animate().translationX(-slideDirection * imageView.getWidth() * 0.35f)
+                .alpha(0.75f).setDuration(110)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .withEndAction(() -> {
+                    currentIndex = target;
+                    loadCurrentItem();
+                }).start();
     }
 
     private void stopVideoPlayback() {
