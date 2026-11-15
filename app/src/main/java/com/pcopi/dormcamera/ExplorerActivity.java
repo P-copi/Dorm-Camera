@@ -125,11 +125,10 @@ public class ExplorerActivity extends AppCompatActivity {
             showFolderGallery();
             scanAndRefreshMedia();
         } else {
-            ActivityCompat.requestPermissions(
-                    this,
-                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
-                    REQ_LEGACY_READ
-            );
+            String[] requested = Build.VERSION.SDK_INT >= 33
+                    ? new String[]{Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO}
+                    : new String[]{Manifest.permission.READ_EXTERNAL_STORAGE};
+            ActivityCompat.requestPermissions(this, requested, REQ_LEGACY_READ);
         }
     }
 
@@ -203,6 +202,10 @@ public class ExplorerActivity extends AppCompatActivity {
     }
 
     private boolean hasLegacyReadPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+                    && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED;
+        }
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) return true;
         return ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED;
@@ -1040,7 +1043,7 @@ public class ExplorerActivity extends AppCompatActivity {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_LEGACY_READ) {
-            if (hasLegacyReadPermission()) showFolderGallery();
+            if (hasLegacyReadPermission()) { showFolderGallery(); scanAndRefreshMedia(); }
             else Toast.makeText(this, "ต้องอนุญาตสิทธิ์อ่านไฟล์เพื่อใช้ Explorer", Toast.LENGTH_LONG).show();
         }
     }
