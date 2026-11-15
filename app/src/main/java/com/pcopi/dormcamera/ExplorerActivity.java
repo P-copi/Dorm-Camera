@@ -241,10 +241,18 @@ public class ExplorerActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("เลือกโฟลเดอร์ • DormCamera")
                 .setItems(labels.toArray(new String[0]), (dialog, which) -> {
-                    browsingFolder = paths.get(which);
-                    showAllFolders = false;
-                    recentOnly = false;
-                    loadMedia();
+                    String chosen = paths.get(which);
+                    new AlertDialog.Builder(this)
+                            .setTitle("📁 " + FolderStore.displayName(chosen))
+                            .setItems(new String[]{"เปิดภาพและวิดีโอ", "＋ สร้างซับโฟลเดอร์ที่นี่"}, (d, action) -> {
+                                browsingFolder = chosen;
+                                showAllFolders = false;
+                                recentOnly = false;
+                                if (action == 0) loadMedia();
+                                else createExplorerSubfolder();
+                            })
+                            .setNegativeButton("กลับ", null)
+                            .show();
                 })
                 .setNeutralButton("+ ซับโฟลเดอร์", (dialog, which) -> createExplorerSubfolder())
                 .setNegativeButton("ปิด", null)
