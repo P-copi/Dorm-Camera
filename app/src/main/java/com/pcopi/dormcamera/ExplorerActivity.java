@@ -255,65 +255,49 @@ public class ExplorerActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void queryCollection(
-            Uri collection,
-            boolean video,
-            String relativePath,
-            File legacyDir,
-            List<MediaItem> output,
-            boolean includeChildren
-    ) {
-        String[] projection;
-        String selection;
-        String[] args;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            projection = new String[]{
-                    MediaStore.MediaColumns._ID,
-                    MediaStore.MediaColumns.DISPLAY_NAME,
-                    MediaStore.MediaColumns.MIME_TYPE,
-                    MediaStore.MediaColumns.DATE_ADDED,
-                    MediaStore.MediaColumns.RELATIVE_PATH
-            };
-            selection = includeChildren
-                    ? MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?"
-                    : MediaStore.MediaColumns.RELATIVE_PATH + "=?";
-            args = new String[]{includeChildren ? "DCIM/" + FolderStore.PUBLIC_FOLDER + "/%" : relativePath};
-        } else {
-            projection = new String[]{
-                    MediaStore.MediaColumns._ID,
-                    MediaStore.MediaColumns.DISPLAY_NAME,
-                    MediaStore.MediaColumns.MIME_TYPE,
-                    MediaStore.MediaColumns.DATE_ADDED,
-                    MediaStore.MediaColumns.DATA
-            };
-            selection = MediaStore.MediaColumns.DATA + " LIKE ?";
-            args = new String[]{(includeChildren ? FolderStore.legacyPictureDir("") : legacyDir).getAbsolutePath() + File.separator + "%"};
-        }
-
-        try (Cursor cursor = getContentResolver().query(
-                collection,
-                projection,
-                selection,
-                args,
-                MediaStore.MediaColumns.DATE_ADDED + " DESC"
-        )) {
+    /** Query the media index broadly, then match folder paths ourselves.
+     *  Exact SQL RELATIVE_PATH matching can miss imported files when path formatting differs. */
+    private void queryCollection(Uri collection, boolean video, String relativePath,
+                                 File legacyDir, List<MediaItem> output, boolean includeChildren) {
+        boolean modern = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+        String pathColumn = modern ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA;
+        String[] projection = {MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.MIME_TYPE, MediaStore.MediaColumns.DATE_ADDED, pathColumn};
+        try (Cursor cursor = getContentResolver().query(collection, projection, null, null,
+                MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
             if (cursor == null) return;
             int idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID);
             int nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME);
             int mimeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE);
             int dateIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED);
-
+            int pathIndex = cursor.getColumnIndexOrThrow(pathColumn);
+            String root = normalizeMediaPath("DCIM/" + FolderStore.PUBLIC_FOLDER + "/");
+            String wanted = normalizeMediaPath(relativePath);
             while (cursor.moveToNext()) {
+                String actual = normalizeMediaPath(cursor.getString(pathIndex));
+                boolean matches;
+                if (modern) matches = includeChildren ? actual.startsWith(root.toLowerCase(Locale.ROOT))
+                        : actual.equals(wanted);
+                else {
+                    String legacy = normalizeMediaPath(legacyDir.getAbsolutePath());
+                    String allRoot = normalizeMediaPath(FolderStore.legacyPictureDir("").getAbsolutePath());
+                    matches = actual.startsWith(includeChildren ? allRoot : legacy);
+                }
+                if (!matches) continue;
                 long id = cursor.getLong(idIndex);
-                String name = cursor.getString(nameIndex);
-                String mime = cursor.getString(mimeIndex);
-                long date = cursor.getLong(dateIndex);
-                Uri uri = ContentUris.withAppendedId(collection, id);
-                output.add(new MediaItem(id, uri, name, mime, date, video));
+                output.add(new MediaItem(id, ContentUris.withAppendedId(collection, id),
+                        cursor.getString(nameIndex), cursor.getString(mimeIndex), cursor.getLong(dateIndex), video));
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            android.util.Log.w("DormExplorer", "MediaStore folder query failed", e);
         }
+    }
+
+    private String normalizeMediaPath(String raw) {
+        if (raw == null) return "";
+        String path = raw.replace((char) 92, '/').trim().toLowerCase(Locale.ROOT);
+        while (path.contains("//")) path = path.replace("//", "/");
+        return path.endsWith("/") ? path : path + "/";
     }
 
     private void showFolderTreeDialog() {
