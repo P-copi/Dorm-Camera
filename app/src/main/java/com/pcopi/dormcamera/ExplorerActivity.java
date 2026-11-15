@@ -392,7 +392,7 @@ public class ExplorerActivity extends AppCompatActivity {
                     cover = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0));
             } catch (Exception ignored) { }
             Bitmap bitmap = null;
-            if (cover != null) try { bitmap = getContentResolver().loadThumbnail(cover, new Size(320, 240), null); } catch (Exception ignored) { }
+            if (cover != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) try { bitmap = getContentResolver().loadThumbnail(cover, new Size(320, 240), null); } catch (Exception ignored) { }
             Bitmap result = bitmap;
             runOnUiThread(() -> { if (relative.equals(target.getTag()) && result != null) target.setImageBitmap(result); });
         });
