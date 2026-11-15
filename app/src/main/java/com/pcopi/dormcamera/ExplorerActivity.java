@@ -74,6 +74,9 @@ public class ExplorerActivity extends AppCompatActivity {
     private boolean recentOnly = false;
     private String browsingFolder = "";
     private int loadGeneration = 0;
+    private boolean folderGallery = true;
+    private final List<String> visibleFolders = new ArrayList<>();
+    private BaseAdapter folderAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,15 +95,18 @@ public class ExplorerActivity extends AppCompatActivity {
         folderStore = new FolderStore(this);
         browsingFolder = folderStore.getCurrentFolder();
         findViewById(R.id.allMediaTab).setOnClickListener(v -> {
-            showAllFolders = true; recentOnly = false; loadMedia();
+            folderGallery = false; showAllFolders = true; recentOnly = false; loadMedia();
         });
-        findViewById(R.id.folderTreeTab).setOnClickListener(v -> showFolderTreeDialog());
+        findViewById(R.id.folderTreeTab).setOnClickListener(v -> {
+            folderGallery = true; browsingFolder = ""; showFolderGallery();
+        });
         findViewById(R.id.recentMediaTab).setOnClickListener(v -> {
-            showAllFolders = true; recentOnly = true; loadMedia();
+            folderGallery = false; showAllFolders = true; recentOnly = true; loadMedia();
         });
         thumbnailExecutor = Executors.newFixedThreadPool(3);
         adapter = new MediaAdapter();
         mediaGrid.setAdapter(adapter);
+        folderAdapter = new FolderGalleryAdapter();
 
         selectAllButton.setOnClickListener(v -> selectAll());
         clearButton.setOnClickListener(v -> clearSelection());
@@ -109,7 +115,7 @@ public class ExplorerActivity extends AppCompatActivity {
         closeButton.setOnClickListener(v -> finish());
 
         if (hasLegacyReadPermission()) {
-            loadMedia();
+            showFolderGallery();
         } else {
             ActivityCompat.requestPermissions(
                     this,
@@ -126,6 +132,8 @@ public class ExplorerActivity extends AppCompatActivity {
     }
 
     private void loadMedia() {
+        folderGallery = false;
+        mediaGrid.setAdapter(adapter);
         String folder = browsingFolder;
         boolean all = showAllFolders;
         boolean recent = recentOnly;
@@ -248,7 +256,7 @@ public class ExplorerActivity extends AppCompatActivity {
                                 browsingFolder = chosen;
                                 showAllFolders = false;
                                 recentOnly = false;
-                                if (action == 0) loadMedia();
+                                if (action == 0) showFolderGallery();
                                 else createExplorerSubfolder();
                             })
                             .setNegativeButton("กลับ", null)
@@ -283,10 +291,106 @@ public class ExplorerActivity extends AppCompatActivity {
                     browsingFolder = path;
                     showAllFolders = false;
                     recentOnly = false;
-                    loadMedia();
+                    showFolderGallery();
                 })
                 .setNegativeButton("ยกเลิก", null)
                 .show();
+    }
+
+    private void showFolderGallery() {
+        folderGallery = true;
+        ++loadGeneration;
+        selected.clear();
+        visibleFolders.clear();
+        for (String path : folderStore.getKnownFolders()) {
+            if (path.isEmpty()) continue;
+            if (FolderStore.parentPath(path).equals(browsingFolder)) visibleFolders.add(path);
+        }
+        folderTitle.setText("Explorer • " + (browsingFolder.isEmpty() ? "DormCamera" : FolderStore.displayName(browsingFolder)));
+        countText.setText(visibleFolders.size() + " โฟลเดอร์ • แตะเพื่อเปิด • กดค้างเพื่อจัดการ");
+        mediaGrid.setAdapter(folderAdapter);
+        folderAdapter.notifyDataSetChanged();
+    }
+
+    private void showFolderActions(String path) {
+        new AlertDialog.Builder(this)
+                .setTitle("📁 " + FolderStore.displayName(path))
+                .setItems(new String[]{"เปิดโฟลเดอร์", "ดูภาพในโฟลเดอร์นี้", "＋ สร้างซับโฟลเดอร์", "เปลี่ยนชื่อโฟลเดอร์", "ใช้เป็นโฟลเดอร์ถ่ายภาพ"}, (d, which) -> {
+                    if (which == 0) { browsingFolder = path; showFolderGallery(); }
+                    else if (which == 1) { browsingFolder = path; showAllFolders = false; recentOnly = false; loadMedia(); }
+                    else if (which == 2) { browsingFolder = path; createExplorerSubfolder(); }
+                    else if (which == 3) renameExplorerFolder(path);
+                    else {
+                        if (folderStore.isLocked()) Toast.makeText(this, "กรุณาปลดล็อกโฟลเดอร์ในหน้ากล้องก่อน", Toast.LENGTH_LONG).show();
+                        else { folderStore.setCurrentFolder(path); Toast.makeText(this, "เลือกโฟลเดอร์บันทึกแล้ว", Toast.LENGTH_SHORT).show(); }
+                    }
+                })
+                .setNegativeButton("ปิด", null)
+                .show();
+    }
+
+    private void renameExplorerFolder(String path) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(path.substring(path.lastIndexOf('/') + 1));
+        new AlertDialog.Builder(this).setTitle("เปลี่ยนชื่อโฟลเดอร์").setView(input)
+                .setPositiveButton("เปลี่ยนชื่อ", (d, w) -> {
+                    String leaf = FolderStore.normalize(input.getText().toString());
+                    if (leaf.isEmpty()) return;
+                    String renamed = FolderStore.childPath(FolderStore.parentPath(path), leaf);
+                    if (renamed.equals(path)) return;
+                    if (folderStore.getKnownFolders().contains(renamed)) {
+                        Toast.makeText(this, "มีชื่อโฟลเดอร์นี้แล้ว", Toast.LENGTH_LONG).show(); return;
+                    }
+                    // Do not rewrite stored paths while media or nested directories may exist.
+                    Toast.makeText(this, "ยังไม่เปลี่ยนชื่อ: โฟลเดอร์ที่มีไฟล์ต้องตรวจสอบและย้ายข้อมูลอย่างปลอดภัยก่อน", Toast.LENGTH_LONG).show();
+                }).setNegativeButton("ยกเลิก", null).show();
+    }
+
+    private final class FolderGalleryAdapter extends BaseAdapter {
+        @Override public int getCount() { return visibleFolders.size(); }
+        @Override public Object getItem(int position) { return visibleFolders.get(position); }
+        @Override public long getItemId(int position) { return position; }
+        @Override public View getView(int position, View recycled, ViewGroup parent) {
+            String path = visibleFolders.get(position);
+            android.widget.LinearLayout card = new android.widget.LinearLayout(ExplorerActivity.this);
+            card.setOrientation(android.widget.LinearLayout.VERTICAL);
+            card.setPadding(dp(5), dp(5), dp(5), dp(8));
+            card.setBackgroundColor(0xFF202127);
+            ImageView cover = new ImageView(ExplorerActivity.this);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setImageResource(android.R.drawable.ic_menu_gallery);
+            card.addView(cover, new android.widget.LinearLayout.LayoutParams(-1, dp(110)));
+            TextView name = new TextView(ExplorerActivity.this);
+            name.setText("📁 " + path.substring(path.lastIndexOf('/') + 1));
+            name.setTextColor(0xFFFFFFFF);
+            name.setTextSize(13);
+            name.setMaxLines(2);
+            card.addView(name);
+            card.setOnClickListener(v -> { browsingFolder = path; showFolderGallery(); });
+            card.setOnLongClickListener(v -> { showFolderActions(path); return true; });
+            loadFolderCover(path, cover);
+            return card;
+        }
+    }
+
+    private void loadFolderCover(String path, ImageView target) {
+        String relative = FolderStore.pictureRelativePath(path);
+        target.setTag(relative);
+        thumbnailExecutor.submit(() -> {
+            Uri cover = null;
+            try (Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Images.Media._ID},
+                    MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?",
+                    new String[]{relative + "%"}, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
+                if (cursor != null && cursor.moveToFirst())
+                    cover = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+            } catch (Exception ignored) { }
+            Bitmap bitmap = null;
+            if (cover != null) try { bitmap = getContentResolver().loadThumbnail(cover, new Size(320, 240), null); } catch (Exception ignored) { }
+            Bitmap result = bitmap;
+            runOnUiThread(() -> { if (relative.equals(target.getTag()) && result != null) target.setImageBitmap(result); });
+        });
     }
 
     private void handleItemTap(MediaItem item) {
