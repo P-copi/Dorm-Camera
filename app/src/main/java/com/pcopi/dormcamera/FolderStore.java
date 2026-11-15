@@ -76,6 +76,19 @@ public final class FolderStore {
         editor.apply();
     }
 
+    /** Remove only an already verified empty folder registration. Never remove descendants. */
+    public boolean removeEmptyFolder(@NonNull String folder) {
+        String path = normalizePath(folder);
+        if (path.isEmpty() || path.equals(getCurrentFolder())) return false;
+        Set<String> folders = new HashSet<>(prefs.getStringSet(KEY_KNOWN, Collections.emptySet()));
+        for (String existing : folders) {
+            if (normalizePath(existing).startsWith(path + "/")) return false;
+        }
+        if (!folders.remove(path)) return false;
+        prefs.edit().putStringSet(KEY_KNOWN, folders).apply();
+        return true;
+    }
+
     @NonNull
     public List<String> getKnownFolders() {
         Set<String> stored = new HashSet<>(prefs.getStringSet(KEY_KNOWN, Collections.emptySet()));
