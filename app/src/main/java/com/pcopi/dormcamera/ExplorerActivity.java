@@ -269,7 +269,8 @@ public class ExplorerActivity extends AppCompatActivity {
         boolean modern = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
         String pathColumn = modern ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA;
         String[] projection = {MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-                MediaStore.MediaColumns.MIME_TYPE, MediaStore.MediaColumns.DATE_ADDED, pathColumn};
+                MediaStore.MediaColumns.MIME_TYPE, MediaStore.MediaColumns.DATE_ADDED, pathColumn,
+                MediaStore.MediaColumns.DATA};
         try (Cursor cursor = getContentResolver().query(collection, projection, null, null,
                 MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
             if (cursor == null) return;
@@ -278,14 +279,18 @@ public class ExplorerActivity extends AppCompatActivity {
             int mimeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE);
             int dateIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED);
             int pathIndex = cursor.getColumnIndexOrThrow(pathColumn);
+            int dataIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATA);
             String root = normalizeMediaPath("DCIM/" + FolderStore.PUBLIC_FOLDER + "/");
             String wanted = normalizeMediaPath(relativePath);
             while (cursor.moveToNext()) {
                 String actual = normalizeMediaPath(cursor.getString(pathIndex));
+                String diskPath = dataIndex >= 0 ? normalizeMediaPath(cursor.getString(dataIndex)) : "";
+                String targetDisk = normalizeMediaPath(legacyDir.getAbsolutePath());
                 boolean matches;
-                if (modern) matches = includeChildren
-                        ? actual.startsWith(wanted)
-                        : actual.equals(wanted);
+                if (modern) matches = (includeChildren ? actual.startsWith(wanted) : actual.equals(wanted))
+                        || (!diskPath.isEmpty() && (includeChildren
+                        ? diskPath.startsWith(targetDisk)
+                        : diskPath.equals(targetDisk)));
                 else {
                     String legacy = normalizeMediaPath(legacyDir.getAbsolutePath());
                     String allRoot = normalizeMediaPath(FolderStore.legacyPictureDir("").getAbsolutePath());
