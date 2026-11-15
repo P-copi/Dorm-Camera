@@ -105,7 +105,7 @@ public final class FolderStore {
     /** Safe hierarchical path under DormCamera; never accept traversal or absolute paths. */
     @NonNull
     public static String normalizePath(@NonNull String raw) {
-        String[] segments = raw.replace('\\\\', '/').split("/");
+        String[] segments = raw.replace((char) 92, '/').split("/");
         List<String> safe = new ArrayList<>();
         for (String segment : segments) {
             String part = normalize(segment);
@@ -173,7 +173,7 @@ public final class FolderStore {
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
                 PUBLIC_FOLDER
         );
-        return folder.isEmpty() ? root : new File(root, folder);
+        return folder.isEmpty() ? root : new File(root, normalizePath(folder));
     }
 
     private void remember(@NonNull String folder) {
