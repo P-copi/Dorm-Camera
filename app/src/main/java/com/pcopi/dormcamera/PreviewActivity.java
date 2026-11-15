@@ -169,7 +169,7 @@ public class PreviewActivity extends AppCompatActivity {
             selection = includeChildren
                     ? MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?"
                     : MediaStore.MediaColumns.RELATIVE_PATH + "=?";
-            args = new String[]{includeChildren ? "DCIM/" + FolderStore.PUBLIC_FOLDER + "/%" : relativePath};
+            args = new String[]{includeChildren ? relativePath + "%" : relativePath};
         } else {
             projection = new String[]{
                     MediaStore.MediaColumns._ID,
@@ -179,7 +179,7 @@ public class PreviewActivity extends AppCompatActivity {
                     MediaStore.MediaColumns.DATA
             };
             selection = MediaStore.MediaColumns.DATA + " LIKE ?";
-            args = new String[]{(includeChildren ? FolderStore.legacyPictureDir("") : legacyDir).getAbsolutePath() + File.separator + "%"};
+            args = new String[]{legacyDir.getAbsolutePath() + File.separator + "%"};
         }
 
         try (Cursor cursor = getContentResolver().query(
