@@ -224,7 +224,7 @@ public class ExplorerActivity extends AppCompatActivity {
         boolean all = showAllFolders;
         boolean recent = recentOnly;
         int generation = ++loadGeneration;
-        folderTitle.setText(all ? (recent ? "Explorer • ล่าสุด" : "Explorer • ภาพทั้งหมด") : "Explorer • " + FolderStore.displayName(folder));
+        folderTitle.setText(all ? (recent ? "Explorer • ล่าสุด" : "Explorer • ภาพทั้งหมด") : "Explorer • " + FolderStore.displayName(folder) + " (รวมซับโฟลเดอร์)");
         countText.setText("กำลังอ่านรายการ...");
         items.clear();
         selected.clear();
@@ -237,7 +237,7 @@ public class ExplorerActivity extends AppCompatActivity {
                     false,
                     FolderStore.pictureRelativePath(folder),
                     FolderStore.legacyPictureDir(folder),
-                    loaded, all
+                    loaded, true
             );
             queryCollection(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -283,12 +283,13 @@ public class ExplorerActivity extends AppCompatActivity {
             while (cursor.moveToNext()) {
                 String actual = normalizeMediaPath(cursor.getString(pathIndex));
                 boolean matches;
-                if (modern) matches = includeChildren ? actual.startsWith(root.toLowerCase(Locale.ROOT))
+                if (modern) matches = includeChildren
+                        ? actual.startsWith(wanted)
                         : actual.equals(wanted);
                 else {
                     String legacy = normalizeMediaPath(legacyDir.getAbsolutePath());
                     String allRoot = normalizeMediaPath(FolderStore.legacyPictureDir("").getAbsolutePath());
-                    matches = actual.startsWith(includeChildren ? allRoot : legacy);
+                    matches = actual.startsWith(includeChildren ? legacy : legacy);
                 }
                 if (!matches) continue;
                 long id = cursor.getLong(idIndex);
@@ -580,7 +581,7 @@ public class ExplorerActivity extends AppCompatActivity {
         intent.putExtra(PreviewActivity.EXTRA_MIME, item.mimeType);
         intent.putExtra(PreviewActivity.EXTRA_NAME, item.name);
         intent.putExtra(PreviewActivity.EXTRA_FOLDER, browsingFolder);
-        intent.putExtra(PreviewActivity.EXTRA_ALL_FOLDERS, showAllFolders);
+        intent.putExtra(PreviewActivity.EXTRA_ALL_FOLDERS, true);
         startActivity(intent);
     }
 
