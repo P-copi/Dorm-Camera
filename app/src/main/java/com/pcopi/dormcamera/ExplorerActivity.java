@@ -110,9 +110,14 @@ public class ExplorerActivity extends AppCompatActivity {
 
         selectAllButton.setOnClickListener(v -> selectAll());
         clearButton.setOnClickListener(v -> clearSelection());
-        refreshButton.setOnClickListener(v -> loadMedia());
+        refreshButton.setOnClickListener(v -> { if (folderGallery) showFolderGallery(); else loadMedia(); });
         toolsButton.setOnClickListener(this::showToolsMenu);
-        closeButton.setOnClickListener(v -> finish());
+        closeButton.setOnClickListener(v -> {
+            if (folderGallery && !browsingFolder.isEmpty()) {
+                browsingFolder = FolderStore.parentPath(browsingFolder);
+                showFolderGallery();
+            } else finish();
+        });
 
         if (hasLegacyReadPermission()) {
             showFolderGallery();
@@ -895,7 +900,7 @@ public class ExplorerActivity extends AppCompatActivity {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_LEGACY_READ) {
-            if (hasLegacyReadPermission()) loadMedia();
+            if (hasLegacyReadPermission()) showFolderGallery();
             else Toast.makeText(this, "ต้องอนุญาตสิทธิ์อ่านไฟล์เพื่อใช้ Explorer", Toast.LENGTH_LONG).show();
         }
     }
