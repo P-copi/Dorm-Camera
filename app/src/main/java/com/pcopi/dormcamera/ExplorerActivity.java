@@ -289,7 +289,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 else {
                     String legacy = normalizeMediaPath(legacyDir.getAbsolutePath());
                     String allRoot = normalizeMediaPath(FolderStore.legacyPictureDir("").getAbsolutePath());
-                    matches = actual.startsWith(includeChildren ? legacy : legacy);
+                    matches = includeChildren ? actual.startsWith(legacy) : actual.equals(legacy);
                 }
                 if (!matches) continue;
                 long id = cursor.getLong(idIndex);
