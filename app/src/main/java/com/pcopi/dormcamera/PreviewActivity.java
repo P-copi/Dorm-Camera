@@ -25,6 +25,8 @@ public class PreviewActivity extends AppCompatActivity {
     public static final String EXTRA_URI = "uri";
     public static final String EXTRA_MIME = "mime";
     public static final String EXTRA_NAME = "name";
+    public static final String EXTRA_FOLDER = "explorer_folder";
+    public static final String EXTRA_ALL_FOLDERS = "explorer_all_folders";
 
     private TextView title;
     private ZoomImageView imageView;
@@ -81,7 +83,9 @@ public class PreviewActivity extends AppCompatActivity {
     private void loadFolderSequence() {
         new Thread(() -> {
             FolderStore folderStore = new FolderStore(this);
-            String folder = folderStore.getCurrentFolder();
+            String folder = getIntent().getStringExtra(EXTRA_FOLDER);
+            if (folder == null) folder = folderStore.getCurrentFolder();
+            boolean includeChildren = getIntent().getBooleanExtra(EXTRA_ALL_FOLDERS, false);
             List<PreviewItem> loaded = new ArrayList<>();
 
             queryCollection(
@@ -89,14 +93,14 @@ public class PreviewActivity extends AppCompatActivity {
                     false,
                     FolderStore.pictureRelativePath(folder),
                     FolderStore.legacyPictureDir(folder),
-                    loaded
+                    loaded, includeChildren
             );
             queryCollection(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                     true,
                     FolderStore.videoRelativePath(folder),
                     FolderStore.legacyVideoDir(folder),
-                    loaded
+                    loaded, includeChildren
             );
 
             Collections.sort(loaded, (a, b) -> Long.compare(b.dateAdded, a.dateAdded));
@@ -109,7 +113,8 @@ public class PreviewActivity extends AppCompatActivity {
                     break;
                 }
             }
-            final int resolvedIndex = found >= 0 ? found : 0;
+            if (found < 0) return;
+            final int resolvedIndex = found;
 
             runOnUiThread(() -> {
                 items.clear();
@@ -133,7 +138,8 @@ public class PreviewActivity extends AppCompatActivity {
             boolean video,
             String relativePath,
             File legacyDir,
-            List<PreviewItem> output
+            List<PreviewItem> output,
+            boolean includeChildren
     ) {
         String[] projection;
         String selection;
@@ -147,8 +153,10 @@ public class PreviewActivity extends AppCompatActivity {
                     MediaStore.MediaColumns.DATE_ADDED,
                     MediaStore.MediaColumns.RELATIVE_PATH
             };
-            selection = MediaStore.MediaColumns.RELATIVE_PATH + "=?";
-            args = new String[]{relativePath};
+            selection = includeChildren
+                    ? MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?"
+                    : MediaStore.MediaColumns.RELATIVE_PATH + "=?";
+            args = new String[]{includeChildren ? "DCIM/" + FolderStore.PUBLIC_FOLDER + "/%" : relativePath};
         } else {
             projection = new String[]{
                     MediaStore.MediaColumns._ID,
@@ -158,7 +166,7 @@ public class PreviewActivity extends AppCompatActivity {
                     MediaStore.MediaColumns.DATA
             };
             selection = MediaStore.MediaColumns.DATA + " LIKE ?";
-            args = new String[]{legacyDir.getAbsolutePath() + File.separator + "%"};
+            args = new String[]{(includeChildren ? FolderStore.legacyPictureDir("") : legacyDir).getAbsolutePath() + File.separator + "%"};
         }
 
         try (Cursor cursor = getContentResolver().query(
