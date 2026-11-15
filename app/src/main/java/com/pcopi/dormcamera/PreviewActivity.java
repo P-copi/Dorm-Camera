@@ -1,6 +1,13 @@
 package com.pcopi.dormcamera;
 
 import android.content.ContentUris;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.util.LruCache;
+import android.util.Size;
+import java.io.InputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -37,6 +44,11 @@ public class PreviewActivity extends AppCompatActivity {
 
     private final List<PreviewItem> items = new ArrayList<>();
     private int currentIndex = 0;
+    private final ExecutorService imageLoader = Executors.newSingleThreadExecutor();
+    private final LruCache<String, Bitmap> imageCache = new LruCache<String, Bitmap>(24 * 1024) {
+        @Override protected int sizeOf(String key, Bitmap bitmap) { return bitmap.getByteCount() / 1024; }
+    };
+    private int imageRequest = 0;
     private String initialUriText;
 
     private float swipeStartX;
@@ -264,14 +276,69 @@ public class PreviewActivity extends AppCompatActivity {
             previewStatus.setText(
                     "ปัดซ้าย/ขวาเพื่อเปลี่ยนไฟล์ • บีบนิ้วเพื่อขยาย • แตะสองครั้งเพื่อขยาย/คืนค่า"
             );
-            imageView.setImageURI(item.uri);
-            imageView.post(() -> {
-                if (imageView.getDrawable() == null) {
-                    previewStatus.setText("เปิดภาพไม่สำเร็จ • ปัดซ้าย/ขวาเพื่อดูไฟล์อื่น");
-                    Toast.makeText(this, "เปิดภาพไม่สำเร็จ", Toast.LENGTH_LONG).show();
-                } else {
-                    imageView.resetZoom();
+            displayImageSmoothly(item.uri);
+        }
+    }
+
+    private void displayImageSmoothly(Uri uri) {
+        final String key = uri.toString();
+        final int request = ++imageRequest;
+        Bitmap cached = imageCache.get(key);
+        if (cached != null) {
+            showDecodedImage(cached, request);
+            preloadNeighbors();
+            return;
+        }
+        imageView.animate().cancel();
+        imageView.setAlpha(0.65f);
+        imageLoader.submit(() -> {
+            Bitmap bitmap = decodePreview(uri);
+            if (bitmap != null) imageCache.put(key, bitmap);
+            runOnUiThread(() -> {
+                if (request != imageRequest || isFinishing()) return;
+                if (bitmap == null) {
+                    previewStatus.setText("เปิดภาพไม่สำเร็จ");
+                    return;
                 }
+                showDecodedImage(bitmap, request);
+                preloadNeighbors();
+            });
+        });
+    }
+
+    private Bitmap decodePreview(Uri uri) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                return getContentResolver().loadThumbnail(uri, new Size(1920, 1920), null);
+            }
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 2;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                return BitmapFactory.decodeStream(in, null, options);
+            }
+        } catch (Exception e) { return null; }
+    }
+
+    private void showDecodedImage(Bitmap bitmap, int request) {
+        if (request != imageRequest) return;
+        imageView.animate().cancel();
+        imageView.setImageBitmap(bitmap);
+        imageView.post(imageView::resetZoom);
+        imageView.animate().alpha(1f).setDuration(160).start();
+    }
+
+    private void preloadNeighbors() {
+        int center = currentIndex;
+        for (int offset : new int[]{-1, 1}) {
+            int neighbor = center + offset;
+            if (neighbor < 0 || neighbor >= items.size()) continue;
+            PreviewItem candidate = items.get(neighbor);
+            if (candidate.mimeType.startsWith("video/")) continue;
+            String key = candidate.uri.toString();
+            if (imageCache.get(key) != null) continue;
+            imageLoader.submit(() -> {
+                Bitmap bitmap = decodePreview(candidate.uri);
+                if (bitmap != null) imageCache.put(key, bitmap);
             });
         }
     }
@@ -357,6 +424,7 @@ public class PreviewActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         stopVideoPlayback();
+        imageLoader.shutdownNow();
         super.onDestroy();
     }
 
