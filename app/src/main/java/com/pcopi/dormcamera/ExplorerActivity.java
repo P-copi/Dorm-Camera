@@ -138,6 +138,7 @@ public class ExplorerActivity extends AppCompatActivity {
 
     private void loadMedia() {
         folderGallery = false;
+        mediaGrid.setNumColumns(3);
         mediaGrid.setAdapter(adapter);
         String folder = browsingFolder;
         boolean all = showAllFolders;
@@ -313,6 +314,7 @@ public class ExplorerActivity extends AppCompatActivity {
         }
         folderTitle.setText("Explorer • " + (browsingFolder.isEmpty() ? "DormCamera" : FolderStore.displayName(browsingFolder)));
         countText.setText(visibleFolders.size() + " โฟลเดอร์ • แตะเพื่อเปิด • กดค้างเพื่อจัดการ");
+        mediaGrid.setNumColumns(2);
         mediaGrid.setAdapter(folderAdapter);
         folderAdapter.notifyDataSetChanged();
     }
