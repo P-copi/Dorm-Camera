@@ -314,13 +314,16 @@ public class ExplorerActivity extends AppCompatActivity {
         List<String> labels = new ArrayList<>();
         for (String folder : targets) labels.add(FolderStore.displayName(folder));
         labels.add("＋ สร้างโฟลเดอร์ใหม่...");
+        labels.add("＋ สร้างซับโฟลเดอร์ในโฟลเดอร์ปัจจุบัน...");
 
         String title = move ? "ย้ายไปโฟลเดอร์" : "คัดลอกไปโฟลเดอร์";
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setItems(labels.toArray(new String[0]), (dialog, which) -> {
                     if (which == targets.size()) {
-                        promptNewDestination(move);
+                        promptNewDestination(move, false);
+                    } else if (which == targets.size() + 1) {
+                        promptNewDestination(move, true);
                     } else {
                         confirmTransfer(move, targets.get(which));
                     }
@@ -329,22 +332,29 @@ public class ExplorerActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void promptNewDestination(boolean move) {
+    private void promptNewDestination(boolean move, boolean nested) {
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setHint("เช่น 20");
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("สร้างโฟลเดอร์ปลายทาง")
+                .setTitle(nested ? "สร้างซับโฟลเดอร์ปลายทาง" : "สร้างโฟลเดอร์ปลายทาง")
                 .setView(input)
                 .setPositiveButton("สร้าง", (d, which) -> {
-                    String folder = FolderStore.normalize(input.getText().toString());
-                    if (folder.isEmpty()) {
+                    String leaf = FolderStore.normalize(input.getText().toString());
+                    String folder = nested
+                            ? FolderStore.childPath(folderStore.getCurrentFolder(), leaf)
+                            : leaf;
+                    if (leaf.isEmpty()) {
                         Toast.makeText(this, "กรุณาใส่ชื่อโฟลเดอร์", Toast.LENGTH_SHORT).show();
                         return;
                     }
                     if (folder.equals(folderStore.getCurrentFolder())) {
                         Toast.makeText(this, "โฟลเดอร์นี้เป็นโฟลเดอร์ต้นทางอยู่แล้ว", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    if (folderStore.getKnownFolders().contains(folder)) {
+                        Toast.makeText(this, "มีโฟลเดอร์นี้แล้ว", Toast.LENGTH_LONG).show();
                         return;
                     }
                     folderStore.addFolder(folder);
