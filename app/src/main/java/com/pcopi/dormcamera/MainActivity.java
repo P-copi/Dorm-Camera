@@ -1220,6 +1220,8 @@ public class MainActivity extends AppCompatActivity {
         List<String> labels = new ArrayList<>();
         for (String folder : folders) labels.add(FolderStore.displayName(folder));
         labels.add("+ สร้างโฟลเดอร์ใหม่...");
+        labels.add("📁 สร้างซับโฟลเดอร์ในตำแหน่งปัจจุบัน...");
+        labels.add("↰ กลับไปโฟลเดอร์แม่");
 
         String current = folderStore.getCurrentFolder();
         boolean locked = folderStore.isLocked();
@@ -1235,6 +1237,20 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
+                    if (which == folders.size() + 1) {
+                        showCreateSubfolderDialog();
+                        return;
+                    }
+                    if (which == folders.size() + 2) {
+                        String parent = FolderStore.parentPath(current);
+                        if (locked) confirmUnlockAndSwitch(parent);
+                        else {
+                            folderStore.setCurrentFolder(parent);
+                            updateCameraStatus();
+                            refreshLatestMedia();
+                        }
+                        return;
+                    }
                     String target = folders.get(which);
                     if (target.equals(current)) return;
                     if (locked) {
@@ -1277,6 +1293,8 @@ public class MainActivity extends AppCompatActivity {
         String[] choices = new String[]{
                 "เลือกโฟลเดอร์",
                 "สร้างโฟลเดอร์ใหม่",
+                "สร้างซับโฟลเดอร์ในโฟลเดอร์ปัจจุบัน",
+                "กลับไปโฟลเดอร์แม่",
                 "เปลี่ยนชื่อโฟลเดอร์ปัจจุบัน",
                 lockAction
         };
@@ -1285,7 +1303,17 @@ public class MainActivity extends AppCompatActivity {
                 .setItems(choices, (dialog, which) -> {
                     if (which == 0) showSelectFolderDialog();
                     else if (which == 1) showCreateFolderDialog();
-                    else if (which == 2) showRenameFolderDialog();
+                    else if (which == 2) showCreateSubfolderDialog();
+                    else if (which == 3) {
+                        String parent = FolderStore.parentPath(folderStore.getCurrentFolder());
+                        if (folderStore.isLocked()) confirmUnlockAndSwitch(parent);
+                        else {
+                            folderStore.setCurrentFolder(parent);
+                            updateCameraStatus();
+                            refreshLatestMedia();
+                        }
+                    }
+                    else if (which == 4) showRenameFolderDialog();
                     else toggleFolderLock();
                 })
                 .setNegativeButton("ปิด", null)
@@ -1350,6 +1378,43 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void showCreateSubfolderDialog() {
+        if (folderStore.isLocked()) {
+            Toast.makeText(this, "กรุณาปลดล็อกโฟลเดอร์ก่อน", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String parent = folderStore.getCurrentFolder();
+        if (parent.split("/").length >= 8 && !parent.isEmpty()) {
+            Toast.makeText(this, "โฟลเดอร์ซ้อนกันได้สูงสุด 8 ระดับ", Toast.LENGTH_LONG).show();
+            return;
+        }
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("เช่น สถานีที่ 1");
+        new AlertDialog.Builder(this)
+                .setTitle("สร้างซับโฟลเดอร์ใน " + FolderStore.displayName(parent))
+                .setView(input)
+                .setPositiveButton("สร้างและใช้", (d, which) -> {
+                    String name = FolderStore.normalize(input.getText().toString());
+                    if (name.isEmpty()) {
+                        Toast.makeText(this, "กรุณาใส่ชื่อโฟลเดอร์", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String child = FolderStore.childPath(parent, name);
+                    if (folderStore.getKnownFolders().contains(child)) {
+                        Toast.makeText(this, "มีโฟลเดอร์นี้อยู่แล้ว", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    folderStore.addFolder(child);
+                    folderStore.setCurrentFolder(child);
+                    updateCameraStatus();
+                    refreshLatestMedia();
+                    Toast.makeText(this, "บันทึกลง " + FolderStore.displayName(child), Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
     private void showRenameFolderDialog() {
         if (folderStore.isLocked()) {
             Toast.makeText(this, "โฟลเดอร์ถูกล็อกอยู่ กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
@@ -1362,14 +1427,25 @@ public class MainActivity extends AppCompatActivity {
         }
         EditText input = new EditText(this);
         input.setSingleLine(true);
-        input.setText(oldName);
+        input.setText(oldName.substring(oldName.lastIndexOf("/") + 1));
         input.setSelection(input.length());
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("เปลี่ยนชื่อโฟลเดอร์")
                 .setView(input)
                 .setPositiveButton("เปลี่ยนชื่อ", (d, which) -> {
-                    String newName = FolderStore.normalize(input.getText().toString());
-                    if (newName.isEmpty() || newName.equals(oldName)) return;
+                    String leaf = FolderStore.normalize(input.getText().toString());
+                    String newName = FolderStore.childPath(FolderStore.parentPath(oldName), leaf);
+                    if (leaf.isEmpty() || newName.equals(oldName)) return;
+                    if (folderStore.getKnownFolders().contains(newName)) {
+                        Toast.makeText(this, "มีโฟลเดอร์ปลายทางอยู่แล้ว", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    for (String known : folderStore.getKnownFolders()) {
+                        if (known.startsWith(oldName + "/")) {
+                            Toast.makeText(this, "โฟลเดอร์นี้มีซับโฟลเดอร์ กรุณาเปลี่ยนชื่อด้วยตัวจัดการไฟล์ก่อน", Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                    }
                     renameFolderOnStorage(oldName, newName);
                 })
                 .setNegativeButton("ยกเลิก", null)
