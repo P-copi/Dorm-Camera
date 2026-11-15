@@ -77,6 +77,7 @@ public class ExplorerActivity extends AppCompatActivity {
     private boolean folderGallery = true;
     private final List<String> visibleFolders = new ArrayList<>();
     private BaseAdapter folderAdapter;
+    private Button viewFolderMediaButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,6 +87,12 @@ public class ExplorerActivity extends AppCompatActivity {
         folderTitle = findViewById(R.id.folderTitle);
         countText = findViewById(R.id.countText);
         mediaGrid = findViewById(R.id.mediaGrid);
+        viewFolderMediaButton = findViewById(R.id.viewFolderMediaButton);
+        viewFolderMediaButton.setOnClickListener(v -> {
+            showAllFolders = false;
+            recentOnly = false;
+            loadMedia();
+        });
         selectAllButton = findViewById(R.id.selectAllButton);
         clearButton = findViewById(R.id.clearButton);
         refreshButton = findViewById(R.id.refreshButton);
@@ -138,6 +145,7 @@ public class ExplorerActivity extends AppCompatActivity {
 
     private void loadMedia() {
         folderGallery = false;
+        viewFolderMediaButton.setVisibility(View.GONE);
         mediaGrid.setNumColumns(3);
         mediaGrid.setAdapter(adapter);
         String folder = browsingFolder;
@@ -262,7 +270,7 @@ public class ExplorerActivity extends AppCompatActivity {
                                 browsingFolder = chosen;
                                 showAllFolders = false;
                                 recentOnly = false;
-                                if (action == 0) showFolderGallery();
+                                if (action == 0) { showAllFolders = false; recentOnly = false; loadMedia(); }
                                 else createExplorerSubfolder();
                             })
                             .setNegativeButton("กลับ", null)
@@ -305,6 +313,8 @@ public class ExplorerActivity extends AppCompatActivity {
 
     private void showFolderGallery() {
         folderGallery = true;
+        viewFolderMediaButton.setVisibility(View.VISIBLE);
+        viewFolderMediaButton.setText(browsingFolder.isEmpty() ? "ดูภาพในโฟลเดอร์หลัก" : "🖼 ดูภาพและวิดีโอในโฟลเดอร์นี้");
         ++loadGeneration;
         selected.clear();
         visibleFolders.clear();
@@ -374,7 +384,15 @@ public class ExplorerActivity extends AppCompatActivity {
             name.setTextSize(13);
             name.setMaxLines(2);
             card.addView(name);
-            card.setOnClickListener(v -> { browsingFolder = path; showFolderGallery(); });
+            card.setOnClickListener(v -> {
+                browsingFolder = path;
+                boolean hasChildren = false;
+                for (String known : folderStore.getKnownFolders()) {
+                    if (FolderStore.parentPath(known).equals(path) && !known.equals(path)) { hasChildren = true; break; }
+                }
+                if (hasChildren) showFolderGallery();
+                else { showAllFolders = false; recentOnly = false; loadMedia(); }
+            });
             card.setOnLongClickListener(v -> { showFolderActions(path); return true; });
             loadFolderCover(path, cover);
             return card;
