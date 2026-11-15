@@ -119,12 +119,7 @@ public class ExplorerActivity extends AppCompatActivity {
         clearButton.setOnClickListener(v -> clearSelection());
         refreshButton.setOnClickListener(v -> { if (folderGallery) showFolderGallery(); else loadMedia(); });
         toolsButton.setOnClickListener(this::showToolsMenu);
-        closeButton.setOnClickListener(v -> {
-            if (folderGallery && !browsingFolder.isEmpty()) {
-                browsingFolder = FolderStore.parentPath(browsingFolder);
-                showFolderGallery();
-            } else finish();
-        });
+        closeButton.setOnClickListener(v -> navigateBackInExplorer());
 
         if (hasLegacyReadPermission()) {
             showFolderGallery();
@@ -135,6 +130,20 @@ public class ExplorerActivity extends AppCompatActivity {
                     REQ_LEGACY_READ
             );
         }
+    }
+
+    private void navigateBackInExplorer() {
+        if (!folderGallery) {
+            showFolderGallery();
+        } else if (!browsingFolder.isEmpty()) {
+            browsingFolder = FolderStore.parentPath(browsingFolder);
+            showFolderGallery();
+        } else finish();
+    }
+
+    @Override
+    public void onBackPressed() {
+        navigateBackInExplorer();
     }
 
     private boolean hasLegacyReadPermission() {
