@@ -117,18 +117,60 @@ public class ExplorerActivity extends AppCompatActivity {
 
         selectAllButton.setOnClickListener(v -> selectAll());
         clearButton.setOnClickListener(v -> clearSelection());
-        refreshButton.setOnClickListener(v -> { if (folderGallery) showFolderGallery(); else loadMedia(); });
+        refreshButton.setOnClickListener(v -> scanAndRefreshMedia());
         toolsButton.setOnClickListener(this::showToolsMenu);
         closeButton.setOnClickListener(v -> navigateBackInExplorer());
 
         if (hasLegacyReadPermission()) {
             showFolderGallery();
+            scanAndRefreshMedia();
         } else {
             ActivityCompat.requestPermissions(
                     this,
                     new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
                     REQ_LEGACY_READ
             );
+        }
+    }
+
+    /** Index files copied into DormCamera by other apps without moving or modifying them. */
+    private void scanAndRefreshMedia() {
+        Toast.makeText(this, "กำลังตรวจสอบภาพและวิดีโอที่ย้ายเข้ามา...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            List<String> paths = new ArrayList<>();
+            File root = FolderStore.legacyPictureDir("");
+            collectMediaPaths(root, paths, 0);
+            if (paths.isEmpty()) {
+                runOnUiThread(() -> { if (folderGallery) showFolderGallery(); else loadMedia(); });
+                return;
+            }
+            MediaScannerConnection.scanFile(this, paths.toArray(new String[0]), null,
+                    new MediaScannerConnection.OnScanCompletedListener() {
+                        private final java.util.concurrent.atomic.AtomicInteger remaining =
+                                new java.util.concurrent.atomic.AtomicInteger(paths.size());
+                        @Override public void onScanCompleted(String path, Uri uri) {
+                            if (remaining.decrementAndGet() == 0) runOnUiThread(() -> {
+                                if (folderGallery) showFolderGallery(); else loadMedia();
+                                Toast.makeText(ExplorerActivity.this, "ตรวจสอบสื่อแล้ว " + paths.size() + " ไฟล์", Toast.LENGTH_SHORT).show();
+                            });
+                        }
+                    });
+        }).start();
+    }
+
+    private void collectMediaPaths(File folder, List<String> paths, int depth) {
+        if (depth > 10 || paths.size() >= 2000) return;
+        File[] children = folder.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            if (child.isDirectory()) collectMediaPaths(child, paths, depth + 1);
+            else if (child.isFile()) {
+                String name = child.getName().toLowerCase(Locale.ROOT);
+                if (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")
+                        || name.endsWith(".webp") || name.endsWith(".heic") || name.endsWith(".mp4")
+                        || name.endsWith(".mov")) paths.add(child.getAbsolutePath());
+            }
+            if (paths.size() >= 2000) break;
         }
     }
 
