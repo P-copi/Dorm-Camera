@@ -732,7 +732,7 @@ public class ExplorerActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (!relative.equals(target.getTag())) return;
                 if (result != null) target.setImageBitmap(result);
-                label.setText("📁 " + FolderStore.displayName(path) + " • " + count + " ภาพ");
+                label.setText("📁 " + path.substring(path.lastIndexOf('/') + 1) + " • " + count + " ภาพ");
             });
         });
     }
