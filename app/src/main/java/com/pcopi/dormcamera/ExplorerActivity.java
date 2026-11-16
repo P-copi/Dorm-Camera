@@ -66,6 +66,8 @@ public class ExplorerActivity extends AppCompatActivity {
     private Button closeButton;
 
     private final List<MediaItem> items = new ArrayList<>();
+    private final List<MediaItem> unfilteredMedia = new ArrayList<>();
+    private String mediaSearchText = "";
     private final Set<Uri> selected = new HashSet<>();
     private MediaAdapter adapter;
     private FolderStore folderStore;
@@ -106,7 +108,10 @@ public class ExplorerActivity extends AppCompatActivity {
         browsingFolder = FolderStore.normalizePath(getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE)
                 .getString("last_browsed_folder", folderStore.getCurrentFolder()));
         gallerySortMode = getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE).getInt("gallery_sort_mode", 0);
-        folderTitle.setOnClickListener(v -> { if (folderGallery) showGallerySortDialog(); });
+        folderTitle.setOnClickListener(v -> {
+            if (folderGallery) showGallerySortDialog();
+            else showMediaSearchDialog();
+        });
         findViewById(R.id.allMediaTab).setOnClickListener(v -> {
             folderGallery = false; showAllFolders = true; recentOnly = false; loadMedia();
         });
@@ -292,9 +297,11 @@ public class ExplorerActivity extends AppCompatActivity {
         boolean all = showAllFolders;
         boolean recent = recentOnly;
         int generation = ++loadGeneration;
-        folderTitle.setText(all ? (recent ? "Explorer • ล่าสุด" : "Explorer • ภาพทั้งหมด") : "Explorer • " + FolderStore.displayName(folder) + " (รวมซับโฟลเดอร์)");
+        folderTitle.setText((all ? (recent ? "Explorer • ล่าสุด" : "Explorer • ภาพทั้งหมด") : "Explorer • " + FolderStore.displayName(folder) + " (รวมซับโฟลเดอร์)") + "  🔎");
         countText.setText("กำลังอ่านรายการ...");
         items.clear();
+        unfilteredMedia.clear();
+        mediaSearchText = "";
         selected.clear();
         adapter.notifyDataSetChanged();
 
@@ -319,10 +326,9 @@ public class ExplorerActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
                 if (generation != loadGeneration) return;
-                items.clear();
-                items.addAll(loaded);
-                adapter.notifyDataSetChanged();
-                updateSelectionStatus();
+                unfilteredMedia.clear();
+                unfilteredMedia.addAll(loaded);
+                applyMediaSearch();
                 if (loaded.isEmpty() && !all) {
                     countText.setText("ไม่พบภาพในโฟลเดอร์นี้ • กดรีเฟรชเพื่อตรวจสอบไฟล์และสิทธิ์");
                 }
@@ -791,6 +797,40 @@ public class ExplorerActivity extends AppCompatActivity {
         intent.putExtra(PreviewActivity.EXTRA_FOLDER, browsingFolder);
         intent.putExtra(PreviewActivity.EXTRA_ALL_FOLDERS, true);
         startActivity(intent);
+    }
+
+    /** Search only the loaded list; never rename, move, or alter any file. */
+    private void showMediaSearchDialog() {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("ค้นหาชื่อภาพหรือวิดีโอ");
+        input.setText(mediaSearchText);
+        input.setSelection(input.length());
+        new AlertDialog.Builder(this)
+                .setTitle("ค้นหาในรายการภาพ")
+                .setView(input)
+                .setPositiveButton("ค้นหา", (d, which) -> {
+                    mediaSearchText = input.getText().toString().trim();
+                    applyMediaSearch();
+                })
+                .setNeutralButton("ล้างคำค้น", (d, which) -> {
+                    mediaSearchText = "";
+                    applyMediaSearch();
+                })
+                .setNegativeButton("ยกเลิก", null).show();
+    }
+
+    private void applyMediaSearch() {
+        items.clear();
+        String needle = mediaSearchText.toLowerCase(Locale.ROOT);
+        for (MediaItem media : unfilteredMedia) {
+            if (needle.isEmpty() || media.name.toLowerCase(Locale.ROOT).contains(needle)) items.add(media);
+        }
+        // Avoid accidentally acting on files hidden by a changed search filter.
+        selected.clear();
+        adapter.notifyDataSetChanged();
+        updateSelectionStatus();
+        if (!needle.isEmpty()) countText.setText("พบ " + items.size() + " จาก " + unfilteredMedia.size() + " รายการ • ค้นหา: " + mediaSearchText);
     }
 
     private void showToolsMenu(View anchor) {
