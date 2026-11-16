@@ -573,22 +573,65 @@ public class ExplorerActivity extends AppCompatActivity {
                 .setNegativeButton("ยกเลิก", null).show();
     }
 
+    /** Rename the actual directory first. Never rewrite folder preferences on a failed move. */
     private void renameExplorerFolder(String path) {
+        if (path.isEmpty()) return;
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setText(path.substring(path.lastIndexOf('/') + 1));
-        new AlertDialog.Builder(this).setTitle("เปลี่ยนชื่อโฟลเดอร์").setView(input)
-                .setPositiveButton("เปลี่ยนชื่อ", (d, w) -> {
+        new AlertDialog.Builder(this).setTitle("เปลี่ยนชื่อโฟลเดอร์จริง").setView(input)
+                .setPositiveButton("ตรวจสอบและเปลี่ยนชื่อ", (d, w) -> {
                     String leaf = FolderStore.normalize(input.getText().toString());
-                    if (leaf.isEmpty()) return;
+                    if (leaf.isEmpty()) {
+                        Toast.makeText(this, "ชื่อโฟลเดอร์ไม่ถูกต้อง", Toast.LENGTH_LONG).show();
+                        return;
+                    }
                     String renamed = FolderStore.childPath(FolderStore.parentPath(path), leaf);
                     if (renamed.equals(path)) return;
-                    if (folderStore.getKnownFolders().contains(renamed)) {
-                        Toast.makeText(this, "มีชื่อโฟลเดอร์นี้แล้ว", Toast.LENGTH_LONG).show(); return;
+                    if (folderStore.isLocked() && (path.equals(folderStore.getCurrentFolder())
+                            || folderStore.getCurrentFolder().startsWith(path + "/"))) {
+                        Toast.makeText(this, "โฟลเดอร์บันทึกภาพถูกล็อก กรุณาปลดล็อกก่อน", Toast.LENGTH_LONG).show();
+                        return;
                     }
-                    // Do not rewrite stored paths while media or nested directories may exist.
-                    Toast.makeText(this, "ยังไม่เปลี่ยนชื่อ: โฟลเดอร์ที่มีไฟล์ต้องตรวจสอบและย้ายข้อมูลอย่างปลอดภัยก่อน", Toast.LENGTH_LONG).show();
+                    if (folderStore.getKnownFolders().contains(renamed)) {
+                        Toast.makeText(this, "มีชื่อโฟลเดอร์ปลายทางแล้ว", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    new AlertDialog.Builder(this)
+                            .setTitle("ยืนยันเปลี่ยนชื่อโฟลเดอร์จริง")
+                            .setMessage("จาก: " + path + "\\nเป็น: " + renamed
+                                    + "\\nระบบจะเปลี่ยนชื่อโฟลเดอร์จริงพร้อมโฟลเดอร์ลูก ไม่ลบภาพ")
+                            .setPositiveButton("ยืนยัน", (confirm, which) -> renameRealExplorerFolder(path, renamed))
+                            .setNegativeButton("ยกเลิก", null).show();
                 }).setNegativeButton("ยกเลิก", null).show();
+    }
+
+    private void renameRealExplorerFolder(String oldPath, String newPath) {
+        new Thread(() -> {
+            File source = FolderStore.legacyPictureDir(oldPath);
+            File destination = FolderStore.legacyPictureDir(newPath);
+            boolean valid = source.isDirectory() && !destination.exists()
+                    && source.getParentFile() != null && source.getParentFile().isDirectory()
+                    && source.getParentFile().equals(destination.getParentFile());
+            // Fail closed when video is stored in a distinct physical directory.
+            File oldVideo = FolderStore.legacyVideoDir(oldPath);
+            File newVideo = FolderStore.legacyVideoDir(newPath);
+            if (!oldVideo.equals(source) && oldVideo.exists()) valid = false;
+            if (!newVideo.equals(destination) && newVideo.exists()) valid = false;
+            boolean moved = valid && source.renameTo(destination);
+            runOnUiThread(() -> {
+                if (!moved) {
+                    Toast.makeText(this, "ไม่เปลี่ยนชื่อ: ตรวจสอบโฟลเดอร์จริง/สิทธิ์/ชื่อซ้ำก่อน ข้อมูลเดิมยังอยู่", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                folderStore.renameFolder(oldPath, newPath);
+                if (browsingFolder.equals(oldPath) || browsingFolder.startsWith(oldPath + "/"))
+                    browsingFolder = newPath + browsingFolder.substring(oldPath.length());
+                showFolderGallery();
+                scanAndRefreshMedia();
+                Toast.makeText(this, "เปลี่ยนชื่อโฟลเดอร์จริงแล้ว กำลังปรับดัชนีภาพ", Toast.LENGTH_LONG).show();
+            });
+        }).start();
     }
 
     private final class FolderGalleryAdapter extends BaseAdapter {
