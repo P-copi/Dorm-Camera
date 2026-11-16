@@ -14,7 +14,7 @@
         android:layout_height="22dp"
         android:gravity="center_vertical|start"
         android:paddingStart="14dp"
-        android:text="Dome Camera  •  v0.2.52"
+        android:text="Dome Camera  •  v0.2.53"
         android:textColor="#AFC2D1"
         android:textSize="10sp"
         android:includeFontPadding="false" />
