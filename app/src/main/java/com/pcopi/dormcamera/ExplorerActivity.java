@@ -869,9 +869,9 @@ public class ExplorerActivity extends AppCompatActivity {
     private void updateSelectionStatus() {
         countText.setText(String.format(
                 Locale.US,
-                "ทั้งหมด %d รายการ • เลือก %d รายการ",
-                items.size(),
-                selected.size()
+                "แสดง %d รายการ • เลือก %d รายการ%s",
+                items.size(), selected.size(),
+                mediaSearchText.isEmpty() ? "" : " • ค้นหา: " + mediaSearchText
         ));
         toolsButton.setEnabled(!selected.isEmpty());
         clearButton.setEnabled(!selected.isEmpty());
@@ -918,8 +918,10 @@ public class ExplorerActivity extends AppCompatActivity {
                     && (needle.isEmpty() || media.name.toLowerCase(Locale.ROOT).contains(needle)
                     || media.folderPath.toLowerCase(Locale.ROOT).contains(needle))) items.add(media);
         }
-        // Avoid accidentally acting on files hidden by a changed search filter.
-        selected.clear();
+        // Keep only selections still visible after filtering; never act on hidden files.
+        java.util.HashSet<Uri> visibleUris = new java.util.HashSet<>();
+        for (MediaItem visible : items) visibleUris.add(visible.uri);
+        selected.retainAll(visibleUris);
         adapter.notifyDataSetChanged();
         updateSelectionStatus();
         if (!needle.isEmpty() || mediaTypeFilter != 0) countText.setText("พบ " + items.size() + " จาก " + unfilteredMedia.size() + " รายการ" + (needle.isEmpty() ? "" : " • " + mediaSearchText));
@@ -928,11 +930,11 @@ public class ExplorerActivity extends AppCompatActivity {
     private void showToolsMenu(View anchor) {
         if (selected.isEmpty()) return;
         PopupMenu popup = new PopupMenu(this, anchor);
-        popup.getMenu().add(0, MENU_SHARE, 0, "แชร์");
-        popup.getMenu().add(0, MENU_COPY, 1, "คัดลอก (Copy)");
-        popup.getMenu().add(0, MENU_MOVE, 2, "ย้าย (Move)");
+        popup.getMenu().add(0, MENU_SHARE, 0, "แชร์ " + selected.size() + " รายการ");
+        popup.getMenu().add(0, MENU_COPY, 1, "คัดลอก " + selected.size() + " รายการ");
+        popup.getMenu().add(0, MENU_MOVE, 2, "ย้าย " + selected.size() + " รายการ");
         popup.getMenu().add(0, MENU_RENAME, 3, "เปลี่ยนชื่อ");
-        popup.getMenu().add(0, MENU_DELETE, 4, "ลบ");
+        popup.getMenu().add(0, MENU_DELETE, 4, "ลบ " + selected.size() + " รายการ");
         popup.getMenu().findItem(MENU_RENAME).setEnabled(selected.size() == 1);
         popup.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
@@ -1302,8 +1304,8 @@ public class ExplorerActivity extends AppCompatActivity {
         if (selected.isEmpty()) return;
         int count = selected.size();
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("ลบไฟล์")
-                .setMessage("ลบ " + count + " รายการที่เลือกหรือไม่?")
+                .setTitle("ยืนยันการลบไฟล์")
+                .setMessage("กำลังจะลบ " + count + " รายการที่เลือกอย่างถาวร\\nโปรดตรวจสอบรายการที่เลือกก่อนดำเนินการ")
                 .setPositiveButton("ลบ", (d, which) -> deleteSelected())
                 .setNegativeButton("ยกเลิก", null)
                 .create();
