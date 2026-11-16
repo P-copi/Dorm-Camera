@@ -63,6 +63,9 @@ public class ExplorerActivity extends AppCompatActivity {
     private static final int MENU_DELETE = 5;
 
     private TextView folderTitle;
+    private LinearLayout compactSearchBar;
+    private EditText compactSearchInput;
+    private Spinner compactSearchType;
     private TextView countText;
     private GridView mediaGrid;
     private Button selectAllButton;
@@ -97,6 +100,34 @@ public class ExplorerActivity extends AppCompatActivity {
         setContentView(R.layout.activity_explorer);
 
         folderTitle = findViewById(R.id.folderTitle);
+        compactSearchBar = findViewById(R.id.compactSearchBar);
+        compactSearchInput = findViewById(R.id.compactSearchInput);
+        compactSearchType = findViewById(R.id.compactSearchType);
+        findViewById(R.id.compactSearchClose).setOnClickListener(v -> {
+            compactSearchBar.setVisibility(View.GONE);
+            mediaSearchText = "";
+            mediaTypeFilter = 0;
+            if (!folderGallery) applyMediaSearch();
+        });
+        compactSearchInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                mediaSearchText = s.toString().trim();
+                if (!folderGallery) applyMediaSearch();
+            }
+            @Override public void afterTextChanged(Editable s) { }
+        });
+        ArrayAdapter<String> compactTypes = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"ทั้งหมด", "ภาพ", "วิดีโอ"});
+        compactSearchType.setAdapter(compactTypes);
+        compactSearchType.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                mediaTypeFilter = position;
+                if (!folderGallery) applyMediaSearch();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
         countText = findViewById(R.id.countText);
         mediaGrid = findViewById(R.id.mediaGrid);
         viewFolderMediaButton = findViewById(R.id.viewFolderMediaButton);
@@ -460,6 +491,7 @@ public class ExplorerActivity extends AppCompatActivity {
 
     private void showFolderGallery() {
         folderGallery = true;
+        compactSearchBar.setVisibility(View.GONE);
         viewFolderMediaButton.setVisibility(View.VISIBLE);
         viewFolderMediaButton.setText(browsingFolder.isEmpty() ? "ดูภาพในโฟลเดอร์หลัก" : "🖼 ดูภาพและวิดีโอในโฟลเดอร์นี้");
         int galleryGeneration = ++loadGeneration;
@@ -858,48 +890,10 @@ public class ExplorerActivity extends AppCompatActivity {
 
     /** Search only the loaded list; never rename, move, or alter any file. */
     private void showMediaSearchDialog() {
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(18);
-        panel.setPadding(pad, dp(8), pad, 0);
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setHint("ชื่อไฟล์หรือโฟลเดอร์");
-        input.setText(mediaSearchText);
-        input.setSelection(input.length());
-        panel.addView(input);
-        Spinner type = new Spinner(this);
-        String[] options = {"ภาพและวิดีโอทั้งหมด", "เฉพาะภาพ", "เฉพาะวิดีโอ"};
-        ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, options);
-        type.setAdapter(typeAdapter);
-        type.setSelection(mediaTypeFilter);
-        panel.addView(type);
-        input.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                mediaSearchText = s.toString().trim();
-                applyMediaSearch();
-            }
-            @Override public void afterTextChanged(Editable s) { }
-        });
-        type.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                mediaTypeFilter = position;
-                applyMediaSearch();
-            }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-        });
-        new AlertDialog.Builder(this)
-                .setTitle("ค้นหาและกรองภาพ")
-                .setView(panel)
-                .setPositiveButton("เสร็จ", null)
-                .setNeutralButton("ล้างตัวกรอง", (d, which) -> {
-                    mediaSearchText = "";
-                    mediaTypeFilter = 0;
-                    applyMediaSearch();
-                })
-                .show();
+        compactSearchBar.setVisibility(View.VISIBLE);
+        compactSearchInput.setText(mediaSearchText);
+        compactSearchInput.setSelection(compactSearchInput.length());
+        compactSearchType.setSelection(mediaTypeFilter);
     }
 
     private void applyMediaSearch() {
