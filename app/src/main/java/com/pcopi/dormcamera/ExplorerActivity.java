@@ -109,7 +109,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 .getString("last_browsed_folder", folderStore.getCurrentFolder()));
         gallerySortMode = getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE).getInt("gallery_sort_mode", 0);
         folderTitle.setOnClickListener(v -> {
-            if (folderGallery) showGallerySortDialog();
+            if (folderGallery) showFolderSearchDialog();
             else showMediaSearchDialog();
         });
         findViewById(R.id.allMediaTab).setOnClickListener(v -> {
@@ -373,7 +373,8 @@ public class ExplorerActivity extends AppCompatActivity {
                 if (!matches) continue;
                 long id = cursor.getLong(idIndex);
                 output.add(new MediaItem(id, ContentUris.withAppendedId(collection, id),
-                        cursor.getString(nameIndex), cursor.getString(mimeIndex), cursor.getLong(dateIndex), video));
+                        cursor.getString(nameIndex), cursor.getString(mimeIndex), cursor.getLong(dateIndex), video,
+                        modern ? cursor.getString(pathIndex) : cursor.getString(dataIndex)));
             }
         } catch (Exception e) {
             android.util.Log.w("DormExplorer", "MediaStore folder query failed", e);
@@ -487,6 +488,39 @@ public class ExplorerActivity extends AppCompatActivity {
                 folderAdapter.notifyDataSetChanged();
             });
         }).start();
+    }
+
+    /** Search known folder paths, including nested folders, without changing disk contents. */
+    private void showFolderSearchDialog() {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("เช่น สถานีชาร์จ หรือ 250171");
+        new AlertDialog.Builder(this)
+                .setTitle("ค้นหาชื่อโฟลเดอร์ทั้งหมด")
+                .setView(input)
+                .setPositiveButton("ค้นหา", (dialog, which) -> {
+                    String needle = input.getText().toString().trim().toLowerCase(Locale.ROOT);
+                    if (needle.isEmpty()) return;
+                    List<String> found = new ArrayList<>();
+                    for (String path : folderStore.getKnownFolders()) {
+                        if (!path.isEmpty() && path.toLowerCase(Locale.ROOT).contains(needle)) found.add(path);
+                    }
+                    if (found.isEmpty()) {
+                        Toast.makeText(this, "ไม่พบโฟลเดอร์ที่ตรงกับคำค้น", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    new AlertDialog.Builder(this)
+                            .setTitle("พบ " + found.size() + " โฟลเดอร์")
+                            .setItems(found.toArray(new String[0]), (resultDialog, index) -> {
+                                browsingFolder = found.get(index);
+                                showAllFolders = false;
+                                recentOnly = false;
+                                showFolderGallery();
+                            })
+                            .setNegativeButton("ปิด", null).show();
+                })
+                .setNeutralButton("จัดเรียง", (dialog, which) -> showGallerySortDialog())
+                .setNegativeButton("ยกเลิก", null).show();
     }
 
     /** Sorting affects presentation only; never modifies files or their metadata. */
@@ -803,11 +837,11 @@ public class ExplorerActivity extends AppCompatActivity {
     private void showMediaSearchDialog() {
         EditText input = new EditText(this);
         input.setSingleLine(true);
-        input.setHint("ค้นหาชื่อภาพหรือวิดีโอ");
+        input.setHint("ค้นหาชื่อภาพ วิดีโอ หรือโฟลเดอร์");
         input.setText(mediaSearchText);
         input.setSelection(input.length());
         new AlertDialog.Builder(this)
-                .setTitle("ค้นหาในรายการภาพ")
+                .setTitle("ค้นหาภาพและชื่อโฟลเดอร์")
                 .setView(input)
                 .setPositiveButton("ค้นหา", (d, which) -> {
                     mediaSearchText = input.getText().toString().trim();
@@ -824,7 +858,8 @@ public class ExplorerActivity extends AppCompatActivity {
         items.clear();
         String needle = mediaSearchText.toLowerCase(Locale.ROOT);
         for (MediaItem media : unfilteredMedia) {
-            if (needle.isEmpty() || media.name.toLowerCase(Locale.ROOT).contains(needle)) items.add(media);
+            if (needle.isEmpty() || media.name.toLowerCase(Locale.ROOT).contains(needle)
+                    || media.folderPath.toLowerCase(Locale.ROOT).contains(needle)) items.add(media);
         }
         // Avoid accidentally acting on files hidden by a changed search filter.
         selected.clear();
@@ -1433,14 +1468,16 @@ public class ExplorerActivity extends AppCompatActivity {
         final String mimeType;
         final long dateAdded;
         final boolean video;
+        final String folderPath;
 
-        MediaItem(long id, Uri uri, String name, String mimeType, long dateAdded, boolean video) {
+        MediaItem(long id, Uri uri, String name, String mimeType, long dateAdded, boolean video, String folderPath) {
             this.id = id;
             this.uri = uri;
             this.name = name != null ? name : "ไม่ทราบชื่อ";
             this.mimeType = mimeType != null ? mimeType : (video ? "video/*" : "image/*");
             this.dateAdded = dateAdded;
             this.video = video;
+            this.folderPath = folderPath != null ? folderPath : "";
         }
     }
 }
