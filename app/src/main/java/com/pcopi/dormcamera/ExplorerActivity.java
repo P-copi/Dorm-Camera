@@ -32,6 +32,7 @@ import android.text.Editable;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
+import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -497,36 +498,52 @@ public class ExplorerActivity extends AppCompatActivity {
     }
 
     /** Search known folder paths, including nested folders, without changing disk contents. */
+    /** Live substring search across all known parent and nested folders. */
     private void showFolderSearchDialog() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(16), dp(8), dp(16), dp(8));
         EditText input = new EditText(this);
         input.setSingleLine(true);
-        input.setHint("เช่น สถานีชาร์จ หรือ 250171");
-        new AlertDialog.Builder(this)
-                .setTitle("ค้นหาชื่อโฟลเดอร์ทั้งหมด")
-                .setView(input)
-                .setPositiveButton("ค้นหา", (dialog, which) -> {
-                    String needle = input.getText().toString().trim().toLowerCase(Locale.ROOT);
-                    if (needle.isEmpty()) return;
-                    List<String> found = new ArrayList<>();
-                    for (String path : folderStore.getKnownFolders()) {
-                        if (!path.isEmpty() && path.toLowerCase(Locale.ROOT).contains(needle)) found.add(path);
-                    }
-                    if (found.isEmpty()) {
-                        Toast.makeText(this, "ไม่พบโฟลเดอร์ที่ตรงกับคำค้น", Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    new AlertDialog.Builder(this)
-                            .setTitle("พบ " + found.size() + " โฟลเดอร์")
-                            .setItems(found.toArray(new String[0]), (resultDialog, index) -> {
-                                browsingFolder = found.get(index);
-                                showAllFolders = false;
-                                recentOnly = false;
-                                showFolderGallery();
-                            })
-                            .setNegativeButton("ปิด", null).show();
-                })
-                .setNeutralButton("จัดเรียง", (dialog, which) -> showGallerySortDialog())
-                .setNegativeButton("ยกเลิก", null).show();
+        input.setHint("พิมพ์บางส่วนของชื่อโฟลเดอร์");
+        panel.addView(input);
+        TextView count = new TextView(this);
+        panel.addView(count);
+        ListView results = new ListView(this);
+        panel.addView(results, new LinearLayout.LayoutParams(-1, dp(320)));
+        List<String> matches = new ArrayList<>();
+        ArrayAdapter<String> resultAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_list_item_1, matches);
+        results.setAdapter(resultAdapter);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("ค้นหาโฟลเดอร์ทันที")
+                .setView(panel)
+                .setPositiveButton("ปิด", null)
+                .setNeutralButton("จัดเรียง", (d, which) -> showGallerySortDialog())
+                .create();
+        Runnable refresh = () -> {
+            String needle = input.getText().toString().trim().toLowerCase(Locale.ROOT);
+            matches.clear();
+            if (!needle.isEmpty()) for (String path : folderStore.getKnownFolders()) {
+                if (!path.isEmpty() && path.toLowerCase(Locale.ROOT).contains(needle)) matches.add(path);
+            }
+            resultAdapter.notifyDataSetChanged();
+            count.setText(needle.isEmpty() ? "พิมพ์คำเพื่อค้นหา" : "พบ " + matches.size() + " โฟลเดอร์");
+        };
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { refresh.run(); }
+            @Override public void afterTextChanged(Editable s) { }
+        });
+        results.setOnItemClickListener((parent, view, position, id) -> {
+            browsingFolder = matches.get(position);
+            showAllFolders = false;
+            recentOnly = false;
+            dialog.dismiss();
+            showFolderGallery();
+        });
+        refresh.run();
+        dialog.show();
     }
 
     /** Sorting affects presentation only; never modifies files or their metadata. */
