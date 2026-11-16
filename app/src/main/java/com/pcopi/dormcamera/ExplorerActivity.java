@@ -885,6 +885,19 @@ public class ExplorerActivity extends AppCompatActivity {
         intent.putExtra(PreviewActivity.EXTRA_NAME, item.name);
         intent.putExtra(PreviewActivity.EXTRA_FOLDER, browsingFolder);
         intent.putExtra(PreviewActivity.EXTRA_ALL_FOLDERS, true);
+        // Swipe only through the visible search results, in their displayed order.
+        if (!folderGallery && !items.isEmpty()) {
+            List<String> uris = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            List<String> mimes = new ArrayList<>();
+            for (MediaItem visible : items) {
+                uris.add(visible.uri.toString());
+                names.add(visible.name);
+                mimes.add(visible.mimeType);
+            }
+            intent.putExtra(PreviewActivity.EXTRA_SEQUENCE_TOKEN,
+                    PreviewActivity.prepareSequence(uris, names, mimes));
+        }
         startActivity(intent);
     }
 
