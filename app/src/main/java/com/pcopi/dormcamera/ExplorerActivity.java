@@ -1473,10 +1473,16 @@ public class ExplorerActivity extends AppCompatActivity {
             badge.setText(item.name);
             String folderLabel = item.folderPath.replace((char) 92, '/');
             while (folderLabel.endsWith("/")) folderLabel = folderLabel.substring(0, folderLabel.length() - 1);
-            int slash = folderLabel.lastIndexOf('/');
-            if (slash >= 0) folderLabel = folderLabel.substring(slash + 1);
-            folderBadge.setText("📁 " + (folderLabel.isEmpty() ? "DormCamera" : folderLabel));
-            folderBadge.setVisibility(mediaSearchText.isEmpty() ? View.GONE : View.VISIBLE);
+            // Show the useful folder hierarchy, not just the final leaf name.
+            String lowerPath = folderLabel.toLowerCase(Locale.ROOT);
+            String publicRoot = FolderStore.PUBLIC_FOLDER.toLowerCase(Locale.ROOT);
+            int rootPos = lowerPath.indexOf("/" + publicRoot + "/");
+            if (rootPos >= 0) folderLabel = folderLabel.substring(rootPos + publicRoot.length() + 2);
+            else if (lowerPath.endsWith("/" + publicRoot)) folderLabel = "";
+            if (folderLabel.isEmpty()) folderLabel = "DormCamera";
+            folderBadge.setText("📁 " + folderLabel);
+            folderBadge.setContentDescription("โฟลเดอร์ " + folderLabel);
+            folderBadge.setVisibility(View.VISIBLE);
             playBadge.setVisibility(item.video ? View.VISIBLE : View.GONE);
             image.setImageDrawable(null);
             image.setTag(R.id.thumbnail_uri_tag, item.uri.toString());
