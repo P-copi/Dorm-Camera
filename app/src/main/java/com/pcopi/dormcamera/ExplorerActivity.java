@@ -76,6 +76,7 @@ public class ExplorerActivity extends AppCompatActivity {
     private int loadGeneration = 0;
     private boolean folderGallery = true;
     private final List<String> visibleFolders = new ArrayList<>();
+    private final List<MediaItem> directFolderMedia = new ArrayList<>();
     private BaseAdapter folderAdapter;
     private Button viewFolderMediaButton;
 
@@ -442,8 +443,9 @@ public class ExplorerActivity extends AppCompatActivity {
         folderGallery = true;
         viewFolderMediaButton.setVisibility(View.VISIBLE);
         viewFolderMediaButton.setText(browsingFolder.isEmpty() ? "ดูภาพในโฟลเดอร์หลัก" : "🖼 ดูภาพและวิดีโอในโฟลเดอร์นี้");
-        ++loadGeneration;
+        int galleryGeneration = ++loadGeneration;
         selected.clear();
+        directFolderMedia.clear();
         visibleFolders.clear();
         for (String path : folderStore.getKnownFolders()) {
             if (path.isEmpty()) continue;
@@ -454,6 +456,22 @@ public class ExplorerActivity extends AppCompatActivity {
         mediaGrid.setNumColumns(2);
         mediaGrid.setAdapter(folderAdapter);
         folderAdapter.notifyDataSetChanged();
+        final String folder = browsingFolder;
+        new Thread(() -> {
+            List<MediaItem> direct = new ArrayList<>();
+            queryCollection(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, false,
+                    FolderStore.pictureRelativePath(folder), FolderStore.legacyPictureDir(folder), direct, false);
+            queryCollection(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true,
+                    FolderStore.videoRelativePath(folder), FolderStore.legacyVideoDir(folder), direct, false);
+            Collections.sort(direct, (a, b) -> Long.compare(b.dateAdded, a.dateAdded));
+            runOnUiThread(() -> {
+                if (!folderGallery || galleryGeneration != loadGeneration) return;
+                directFolderMedia.clear();
+                directFolderMedia.addAll(direct);
+                countText.setText(visibleFolders.size() + " โฟลเดอร์ • " + direct.size() + " ภาพ/วิดีโอในชั้นนี้");
+                folderAdapter.notifyDataSetChanged();
+            });
+        }).start();
     }
 
     private void showFolderActions(String path) {
@@ -543,10 +561,11 @@ public class ExplorerActivity extends AppCompatActivity {
     }
 
     private final class FolderGalleryAdapter extends BaseAdapter {
-        @Override public int getCount() { return visibleFolders.size(); }
-        @Override public Object getItem(int position) { return visibleFolders.get(position); }
+        @Override public int getCount() { return visibleFolders.size() + directFolderMedia.size(); }
+        @Override public Object getItem(int position) { return position < visibleFolders.size() ? visibleFolders.get(position) : directFolderMedia.get(position - visibleFolders.size()); }
         @Override public long getItemId(int position) { return position; }
         @Override public View getView(int position, View recycled, ViewGroup parent) {
+            if (position >= visibleFolders.size()) return createDirectMediaCard(directFolderMedia.get(position - visibleFolders.size()));
             String path = visibleFolders.get(position);
             android.widget.LinearLayout card = new android.widget.LinearLayout(ExplorerActivity.this);
             card.setOrientation(android.widget.LinearLayout.VERTICAL);
@@ -575,6 +594,46 @@ public class ExplorerActivity extends AppCompatActivity {
             loadFolderCover(path, cover);
             return card;
         }
+    }
+
+    /** Show images stored directly in this folder beside child folder cards. */
+    private View createDirectMediaCard(MediaItem item) {
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        card.setPadding(dp(5), dp(5), dp(5), dp(8));
+        card.setBackgroundColor(0xFF202127);
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setImageResource(android.R.drawable.ic_menu_gallery);
+        card.addView(image, new android.widget.LinearLayout.LayoutParams(-1, dp(110)));
+        TextView label = new TextView(this);
+        label.setText((item.video ? "▶ " : "🖼 ") + item.name);
+        label.setTextColor(0xFFFFFFFF);
+        label.setTextSize(13);
+        label.setMaxLines(2);
+        card.addView(label);
+        card.setOnClickListener(v -> openPreview(item));
+        card.setOnLongClickListener(v -> {
+            showAllFolders = false;
+            recentOnly = false;
+            loadMedia();
+            Toast.makeText(this, "เปิดรายการภาพเพื่อเลือกและจัดการไฟล์", Toast.LENGTH_SHORT).show();
+            return true;
+        });
+        String key = item.uri.toString();
+        image.setTag(key);
+        thumbnailExecutor.submit(() -> {
+            Bitmap bitmap = null;
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                    bitmap = getContentResolver().loadThumbnail(item.uri, new Size(320, 240), null);
+            } catch (Exception ignored) { }
+            final Bitmap result = bitmap;
+            runOnUiThread(() -> {
+                if (result != null && key.equals(image.getTag())) image.setImageBitmap(result);
+            });
+        });
+        return card;
     }
 
     private void loadFolderCover(String path, ImageView target) {
