@@ -35,6 +35,20 @@ import java.util.List;
 
 public class PreviewActivity extends AppCompatActivity {
     public static final String EXTRA_URI = "uri";
+    public static final String EXTRA_SEQUENCE_TOKEN = "sequence_token";
+    private static long pendingSequenceToken;
+    private static final List<PreviewItem> pendingSequence = new ArrayList<>();
+
+    /** In-process handoff avoids oversized Intent parcels for large search results. */
+    public static synchronized long prepareSequence(List<String> uris, List<String> names, List<String> mimes) {
+        pendingSequence.clear();
+        for (int i = 0; i < uris.size(); i++) {
+            pendingSequence.add(new PreviewItem(Uri.parse(uris.get(i)), names.get(i), mimes.get(i), uris.size() - i));
+        }
+        pendingSequenceToken = System.nanoTime();
+        return pendingSequenceToken;
+    }
+
     public static final String EXTRA_MIME = "mime";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_FOLDER = "explorer_folder";
@@ -95,8 +109,25 @@ public class PreviewActivity extends AppCompatActivity {
                 mime != null ? mime : "",
                 Long.MAX_VALUE
         ));
+        long token = getIntent().getLongExtra(EXTRA_SEQUENCE_TOKEN, 0L);
+        boolean restored = false;
+        if (token != 0L) {
+            synchronized (PreviewActivity.class) {
+                if (token == pendingSequenceToken && !pendingSequence.isEmpty()) {
+                    for (int i = 0; i < pendingSequence.size(); i++) {
+                        if (pendingSequence.get(i).uri.toString().equals(initialUriText)) {
+                            items.clear();
+                            items.addAll(pendingSequence);
+                            currentIndex = i;
+                            restored = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         loadCurrentItem();
-        loadFolderSequence();
+        if (!restored) loadFolderSequence();
     }
 
     private void loadFolderSequence() {
