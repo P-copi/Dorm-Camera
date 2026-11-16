@@ -27,6 +27,11 @@ import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.TextWatcher;
+import android.text.Editable;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -68,6 +73,7 @@ public class ExplorerActivity extends AppCompatActivity {
     private final List<MediaItem> items = new ArrayList<>();
     private final List<MediaItem> unfilteredMedia = new ArrayList<>();
     private String mediaSearchText = "";
+    private int mediaTypeFilter = 0;
     private final Set<Uri> selected = new HashSet<>();
     private MediaAdapter adapter;
     private FolderStore folderStore;
@@ -835,37 +841,64 @@ public class ExplorerActivity extends AppCompatActivity {
 
     /** Search only the loaded list; never rename, move, or alter any file. */
     private void showMediaSearchDialog() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(18);
+        panel.setPadding(pad, dp(8), pad, 0);
         EditText input = new EditText(this);
         input.setSingleLine(true);
-        input.setHint("ค้นหาชื่อภาพ วิดีโอ หรือโฟลเดอร์");
+        input.setHint("ชื่อไฟล์หรือโฟลเดอร์");
         input.setText(mediaSearchText);
         input.setSelection(input.length());
+        panel.addView(input);
+        Spinner type = new Spinner(this);
+        String[] options = {"ภาพและวิดีโอทั้งหมด", "เฉพาะภาพ", "เฉพาะวิดีโอ"};
+        ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, options);
+        type.setAdapter(typeAdapter);
+        type.setSelection(mediaTypeFilter);
+        panel.addView(type);
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                mediaSearchText = s.toString().trim();
+                applyMediaSearch();
+            }
+            @Override public void afterTextChanged(Editable s) { }
+        });
+        type.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                mediaTypeFilter = position;
+                applyMediaSearch();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
         new AlertDialog.Builder(this)
-                .setTitle("ค้นหาภาพและชื่อโฟลเดอร์")
-                .setView(input)
-                .setPositiveButton("ค้นหา", (d, which) -> {
-                    mediaSearchText = input.getText().toString().trim();
-                    applyMediaSearch();
-                })
-                .setNeutralButton("ล้างคำค้น", (d, which) -> {
+                .setTitle("ค้นหาและกรองภาพ")
+                .setView(panel)
+                .setPositiveButton("เสร็จ", null)
+                .setNeutralButton("ล้างตัวกรอง", (d, which) -> {
                     mediaSearchText = "";
+                    mediaTypeFilter = 0;
                     applyMediaSearch();
                 })
-                .setNegativeButton("ยกเลิก", null).show();
+                .show();
     }
 
     private void applyMediaSearch() {
         items.clear();
         String needle = mediaSearchText.toLowerCase(Locale.ROOT);
         for (MediaItem media : unfilteredMedia) {
-            if (needle.isEmpty() || media.name.toLowerCase(Locale.ROOT).contains(needle)
-                    || media.folderPath.toLowerCase(Locale.ROOT).contains(needle)) items.add(media);
+            if ((mediaTypeFilter == 0 || (mediaTypeFilter == 1 && !media.video)
+                    || (mediaTypeFilter == 2 && media.video))
+                    && (needle.isEmpty() || media.name.toLowerCase(Locale.ROOT).contains(needle)
+                    || media.folderPath.toLowerCase(Locale.ROOT).contains(needle))) items.add(media);
         }
         // Avoid accidentally acting on files hidden by a changed search filter.
         selected.clear();
         adapter.notifyDataSetChanged();
         updateSelectionStatus();
-        if (!needle.isEmpty()) countText.setText("พบ " + items.size() + " จาก " + unfilteredMedia.size() + " รายการ • ค้นหา: " + mediaSearchText);
+        if (!needle.isEmpty() || mediaTypeFilter != 0) countText.setText("พบ " + items.size() + " จาก " + unfilteredMedia.size() + " รายการ" + (needle.isEmpty() ? "" : " • " + mediaSearchText));
     }
 
     private void showToolsMenu(View anchor) {
@@ -1337,6 +1370,7 @@ public class ExplorerActivity extends AppCompatActivity {
             CheckBox check;
             TextView badge;
             TextView playBadge;
+            TextView folderBadge;
 
             if (convertView instanceof FrameLayout) {
                 root = (FrameLayout) convertView;
@@ -1344,6 +1378,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 check = (CheckBox) root.findViewWithTag("check");
                 badge = (TextView) root.findViewWithTag("badge");
                 playBadge = (TextView) root.findViewWithTag("playBadge");
+                folderBadge = (TextView) root.findViewWithTag("folderBadge");
             } else {
                 root = new FrameLayout(ExplorerActivity.this);
                 root.setLayoutParams(new GridView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
@@ -1390,6 +1425,18 @@ public class ExplorerActivity extends AppCompatActivity {
                         Gravity.BOTTOM | Gravity.START
                 );
                 root.addView(badge, badgeParams);
+                folderBadge = new TextView(ExplorerActivity.this);
+                folderBadge.setTag("folderBadge");
+                folderBadge.setTextColor(0xFFEEEEEE);
+                folderBadge.setTextSize(10f);
+                folderBadge.setSingleLine(true);
+                folderBadge.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                folderBadge.setBackgroundColor(0xAA222222);
+                folderBadge.setPadding(dp(5), dp(2), dp(5), dp(2));
+                FrameLayout.LayoutParams folderParams = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP);
+                root.addView(folderBadge, folderParams);
             }
 
             MediaItem item = items.get(position);
@@ -1413,6 +1460,12 @@ public class ExplorerActivity extends AppCompatActivity {
             });
 
             badge.setText(item.name);
+            String folderLabel = item.folderPath.replace((char) 92, '/');
+            while (folderLabel.endsWith("/")) folderLabel = folderLabel.substring(0, folderLabel.length() - 1);
+            int slash = folderLabel.lastIndexOf('/');
+            if (slash >= 0) folderLabel = folderLabel.substring(slash + 1);
+            folderBadge.setText("📁 " + (folderLabel.isEmpty() ? "DormCamera" : folderLabel));
+            folderBadge.setVisibility(mediaSearchText.isEmpty() ? View.GONE : View.VISIBLE);
             playBadge.setVisibility(item.video ? View.VISIBLE : View.GONE);
             image.setImageDrawable(null);
             image.setTag(R.id.thumbnail_uri_tag, item.uri.toString());
