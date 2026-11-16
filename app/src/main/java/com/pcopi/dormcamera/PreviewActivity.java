@@ -1,6 +1,11 @@
 package com.pcopi.dormcamera;
 
 import android.content.ContentUris;
+import androidx.appcompat.app.AlertDialog;
+import android.provider.OpenableColumns;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.Locale;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.util.LruCache;
@@ -64,6 +69,7 @@ public class PreviewActivity extends AppCompatActivity {
         setContentView(R.layout.activity_preview);
 
         title = findViewById(R.id.previewTitle);
+        title.setOnClickListener(v -> showCurrentFileDetails());
         imageView = findViewById(R.id.previewImage);
         videoView = findViewById(R.id.previewVideo);
         previewStatus = findViewById(R.id.previewStatus);
@@ -351,10 +357,47 @@ public class PreviewActivity extends AppCompatActivity {
         }
     }
 
+    /** Read-only details; the preview never changes media metadata. */
+    private void showCurrentFileDetails() {
+        if (items.isEmpty()) return;
+        final PreviewItem item = items.get(currentIndex);
+        new Thread(() -> {
+            long size = -1L;
+            int width = 0, height = 0;
+            long modified = 0L;
+            try (Cursor cursor = getContentResolver().query(item.uri,
+                    new String[]{MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.WIDTH,
+                            MediaStore.MediaColumns.HEIGHT, MediaStore.MediaColumns.DATE_MODIFIED},
+                    null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int idx = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE);
+                    if (idx >= 0 && !cursor.isNull(idx)) size = cursor.getLong(idx);
+                    idx = cursor.getColumnIndex(MediaStore.MediaColumns.WIDTH);
+                    if (idx >= 0 && !cursor.isNull(idx)) width = cursor.getInt(idx);
+                    idx = cursor.getColumnIndex(MediaStore.MediaColumns.HEIGHT);
+                    if (idx >= 0 && !cursor.isNull(idx)) height = cursor.getInt(idx);
+                    idx = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED);
+                    if (idx >= 0 && !cursor.isNull(idx)) modified = cursor.getLong(idx);
+                }
+            } catch (Exception ignored) { }
+            final String details = "ชื่อ: " + item.name
+                    + "\\nประเภท: " + item.mimeType
+                    + "\\nความละเอียด: " + (width > 0 && height > 0 ? width + " × " + height : "ไม่พบข้อมูล")
+                    + "\\nขนาด: " + (size >= 0 ? String.format(Locale.US, "%.2f MB", size / 1048576.0) : "ไม่พบข้อมูล")
+                    + "\\nแก้ไขล่าสุด: " + (modified > 0 ? DateFormat.getDateTimeInstance().format(new Date(modified * 1000L)) : "ไม่พบข้อมูล");
+            runOnUiThread(() -> {
+                if (!isFinishing()) new AlertDialog.Builder(this)
+                        .setTitle("รายละเอียดภาพ/วิดีโอ")
+                        .setMessage(details)
+                        .setPositiveButton("ปิด", null).show();
+            });
+        }).start();
+    }
+
     private void updateTitle() {
         if (items.isEmpty()) return;
         PreviewItem item = items.get(currentIndex);
-        title.setText((currentIndex + 1) + "/" + items.size() + " • " + item.name);
+        title.setText((currentIndex + 1) + "/" + items.size() + " • " + item.name + "  ⓘ");
     }
 
     private void showRelative(int delta) {
