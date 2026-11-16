@@ -13,8 +13,8 @@ android {
         applicationId = "com.pcopi.dormcamera"
         minSdk = 26
         targetSdk = 35
-        versionCode = 151
-        versionName = "0.2.51"
+        versionCode = 152
+        versionName = "0.2.52"
     }
 
     signingConfigs {
