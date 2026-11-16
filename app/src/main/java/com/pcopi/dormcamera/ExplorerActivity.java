@@ -622,7 +622,7 @@ public class ExplorerActivity extends AppCompatActivity {
                 else { showAllFolders = false; recentOnly = false; loadMedia(); }
             });
             card.setOnLongClickListener(v -> { showFolderActions(path); return true; });
-            loadFolderCover(path, cover);
+            loadFolderCover(path, cover, name);
             return card;
         }
     }
@@ -667,22 +667,30 @@ public class ExplorerActivity extends AppCompatActivity {
         return card;
     }
 
-    private void loadFolderCover(String path, ImageView target) {
+    private void loadFolderCover(String path, ImageView target, TextView label) {
         String relative = FolderStore.pictureRelativePath(path);
         target.setTag(relative);
         thumbnailExecutor.submit(() -> {
             Uri cover = null;
+            int imageCount = 0;
             try (Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                     new String[]{MediaStore.Images.Media._ID},
                     MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?",
                     new String[]{relative + "%"}, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
-                if (cursor != null && cursor.moveToFirst())
-                    cover = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+                if (cursor != null) {
+                    imageCount = cursor.getCount();
+                    if (cursor.moveToFirst()) cover = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0));
+                }
             } catch (Exception ignored) { }
             Bitmap bitmap = null;
             if (cover != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) try { bitmap = getContentResolver().loadThumbnail(cover, new Size(320, 240), null); } catch (Exception ignored) { }
             Bitmap result = bitmap;
-            runOnUiThread(() -> { if (relative.equals(target.getTag()) && result != null) target.setImageBitmap(result); });
+            final int count = imageCount;
+            runOnUiThread(() -> {
+                if (!relative.equals(target.getTag())) return;
+                if (result != null) target.setImageBitmap(result);
+                label.setText("📁 " + FolderStore.displayName(path) + " • " + count + " ภาพ");
+            });
         });
     }
 
