@@ -79,6 +79,8 @@ public class ExplorerActivity extends AppCompatActivity {
     private final List<MediaItem> directFolderMedia = new ArrayList<>();
     private BaseAdapter folderAdapter;
     private Button viewFolderMediaButton;
+    private int gallerySortMode = 0;
+    private static final String EXPLORER_PREFS = "dorm_explorer_preferences";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -101,7 +103,10 @@ public class ExplorerActivity extends AppCompatActivity {
         closeButton = findViewById(R.id.closeButton);
 
         folderStore = new FolderStore(this);
-        browsingFolder = folderStore.getCurrentFolder();
+        browsingFolder = FolderStore.normalizePath(getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE)
+                .getString("last_browsed_folder", folderStore.getCurrentFolder()));
+        gallerySortMode = getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE).getInt("gallery_sort_mode", 0);
+        folderTitle.setOnClickListener(v -> { if (folderGallery) showGallerySortDialog(); });
         findViewById(R.id.allMediaTab).setOnClickListener(v -> {
             folderGallery = false; showAllFolders = true; recentOnly = false; loadMedia();
         });
@@ -451,8 +456,12 @@ public class ExplorerActivity extends AppCompatActivity {
             if (path.isEmpty()) continue;
             if (FolderStore.parentPath(path).equals(browsingFolder)) visibleFolders.add(path);
         }
-        folderTitle.setText("Explorer • " + (browsingFolder.isEmpty() ? "DormCamera" : FolderStore.displayName(browsingFolder)));
-        countText.setText(visibleFolders.size() + " โฟลเดอร์ • แตะเพื่อเปิด • กดค้างเพื่อจัดการ");
+        Collections.sort(visibleFolders, (a, b) -> gallerySortMode == 1
+                ? b.compareToIgnoreCase(a) : a.compareToIgnoreCase(b));
+        getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE).edit()
+                .putString("last_browsed_folder", browsingFolder).apply();
+        folderTitle.setText("Explorer • " + (browsingFolder.isEmpty() ? "DormCamera" : FolderStore.displayName(browsingFolder)) + "  ▾");
+        countText.setText(visibleFolders.size() + " โฟลเดอร์ • แตะชื่อด้านบนเพื่อจัดเรียง");
         mediaGrid.setNumColumns(2);
         mediaGrid.setAdapter(folderAdapter);
         folderAdapter.notifyDataSetChanged();
@@ -463,15 +472,37 @@ public class ExplorerActivity extends AppCompatActivity {
                     FolderStore.pictureRelativePath(folder), FolderStore.legacyPictureDir(folder), direct, false);
             queryCollection(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true,
                     FolderStore.videoRelativePath(folder), FolderStore.legacyVideoDir(folder), direct, false);
-            Collections.sort(direct, (a, b) -> Long.compare(b.dateAdded, a.dateAdded));
+            sortGalleryMedia(direct);
             runOnUiThread(() -> {
                 if (!folderGallery || galleryGeneration != loadGeneration) return;
                 directFolderMedia.clear();
                 directFolderMedia.addAll(direct);
-                countText.setText(visibleFolders.size() + " โฟลเดอร์ • " + direct.size() + " ภาพ/วิดีโอในชั้นนี้");
+                countText.setText(visibleFolders.size() + " โฟลเดอร์ • " + direct.size() + " ภาพ/วิดีโอในชั้นนี้ • แตะชื่อเพื่อจัดเรียง");
                 folderAdapter.notifyDataSetChanged();
             });
         }).start();
+    }
+
+    /** Sorting affects presentation only; never modifies files or their metadata. */
+    private void sortGalleryMedia(List<MediaItem> media) {
+        if (gallerySortMode == 0) Collections.sort(media, (a, b) -> a.name.compareToIgnoreCase(b.name));
+        else if (gallerySortMode == 1) Collections.sort(media, (a, b) -> b.name.compareToIgnoreCase(a.name));
+        else if (gallerySortMode == 2) Collections.sort(media, (a, b) -> Long.compare(b.dateAdded, a.dateAdded));
+        else Collections.sort(media, (a, b) -> Long.compare(a.dateAdded, b.dateAdded));
+    }
+
+    private void showGallerySortDialog() {
+        final String[] modes = {"ชื่อ ก–ฮ / A–Z", "ชื่อ ฮ–ก / Z–A", "วันที่ใหม่ก่อน", "วันที่เก่าก่อน"};
+        new AlertDialog.Builder(this)
+                .setTitle("จัดเรียง Explorer")
+                .setSingleChoiceItems(modes, gallerySortMode, (dialog, choice) -> {
+                    gallerySortMode = choice;
+                    getSharedPreferences(EXPLORER_PREFS, MODE_PRIVATE).edit()
+                            .putInt("gallery_sort_mode", choice).apply();
+                    dialog.dismiss();
+                    showFolderGallery();
+                })
+                .setNegativeButton("ยกเลิก", null).show();
     }
 
     private void showFolderActions(String path) {
