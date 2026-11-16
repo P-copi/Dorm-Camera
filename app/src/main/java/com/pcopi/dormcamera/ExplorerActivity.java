@@ -118,6 +118,7 @@ public class ExplorerActivity extends AppCompatActivity {
         selectAllButton.setOnClickListener(v -> selectAll());
         clearButton.setOnClickListener(v -> clearSelection());
         refreshButton.setOnClickListener(v -> scanAndRefreshMedia());
+        refreshButton.setOnLongClickListener(v -> { diagnoseCurrentFolder(); return true; });
         toolsButton.setOnClickListener(this::showToolsMenu);
         closeButton.setOnClickListener(v -> navigateBackInExplorer());
 
@@ -133,6 +134,67 @@ public class ExplorerActivity extends AppCompatActivity {
     }
 
     /** Index files copied into DormCamera by other apps without moving or modifying them. */
+    /** Read-only diagnostics for missing photos in a selected folder. */
+    private void diagnoseCurrentFolder() {
+        final String folder = browsingFolder;
+        new Thread(() -> {
+            StringBuilder report = new StringBuilder();
+            File directory = FolderStore.legacyPictureDir(folder);
+            report.append("Explorer V0.2.41 • READ ONLY\\n");
+            report.append("Folder: ").append(folder.isEmpty() ? "(root)" : folder).append("\\n");
+            report.append("Disk: ").append(directory.getAbsolutePath()).append("\\n");
+            File[] children = directory.listFiles();
+            report.append("Disk listing: ").append(children == null ? "unavailable" : children.length).append("\\n");
+            if (children != null) {
+                int shown = 0;
+                for (File file : children) {
+                    if (!file.isFile()) continue;
+                    report.append("FILE ").append(file.getName()).append(" (").append(file.length()).append(" B)\\n");
+                    if (++shown >= 20) { report.append("... additional files omitted\\n"); break; }
+                }
+            }
+            String target = normalizeMediaPath(FolderStore.pictureRelativePath(folder));
+            report.append("Expected MediaStore: ").append(target).append("\\n");
+            int exact = 0, nested = 0, nameMatches = 0;
+            String wantedName = "20261113_145509.jpg";
+            String[] projection = {MediaStore.Images.Media.DISPLAY_NAME,
+                    MediaStore.Images.Media.RELATIVE_PATH, MediaStore.Images.Media.DATA};
+            try (Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection, null, null, null)) {
+                if (cursor != null) {
+                    int n = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME);
+                    int p = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.RELATIVE_PATH);
+                    int d = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+                    while (cursor.moveToNext()) {
+                        String name = cursor.getString(n);
+                        String rel = cursor.getString(p);
+                        String normalized = normalizeMediaPath(rel);
+                        if (normalized.equals(target)) exact++;
+                        else if (normalized.startsWith(target)) nested++;
+                        if (wantedName.equalsIgnoreCase(name)) {
+                            nameMatches++;
+                            report.append("TARGET ").append(name).append("\\n");
+                            report.append("RELATIVE_PATH: ").append(rel).append("\\n");
+                            report.append("DATA: ").append(d >= 0 ? cursor.getString(d) : "(not available)").append("\\n");
+                        }
+                    }
+                }
+            } catch (Exception error) { report.append("MediaStore error: ").append(error.getClass().getSimpleName()).append("\\n"); }
+            report.append("MediaStore direct: ").append(exact).append(", nested: ").append(nested).append("\\n");
+            report.append("Known target filename matches: ").append(nameMatches);
+            final String message = report.toString();
+            runOnUiThread(() -> new AlertDialog.Builder(this)
+                    .setTitle("ตรวจสอบภาพในโฟลเดอร์")
+                    .setMessage(message)
+                    .setPositiveButton("คัดลอกผล", (dialog, which) -> {
+                        android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
+                                getSystemService(CLIPBOARD_SERVICE);
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DormCamera diagnostics", message));
+                        Toast.makeText(this, "คัดลอกผลตรวจสอบแล้ว", Toast.LENGTH_SHORT).show();
+                    }).setNegativeButton("ปิด", null).show());
+        }).start();
+    }
+
     private void scanAndRefreshMedia() {
         Toast.makeText(this, "กำลังตรวจสอบภาพและวิดีโอที่ย้ายเข้ามา...", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
