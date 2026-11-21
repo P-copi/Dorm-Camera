@@ -7,6 +7,10 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.media.MediaActionSound;
+import android.graphics.BitmapFactory;
+import android.util.Size;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import android.media.MediaScannerConnection;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
@@ -86,6 +90,9 @@ public class MainActivity extends AppCompatActivity {
         if (zoomText != null) zoomText.setVisibility(View.GONE);
     };
     private Button photoModeButton;
+    private Button photoResolutionButton;
+    private int photoResolutionChoice = 0;
+    private static final String PREF_PHOTO_RESOLUTION = "photo_resolution_choice";
     private Button captureButton;
     private Button videoButton;
     private Button videoPauseButton;
@@ -160,6 +167,8 @@ public class MainActivity extends AppCompatActivity {
         cameraToolsTab.setOnClickListener(v -> toggleAdvancedControls());
         setAdvancedControlsExpanded(false, false);
         photoModeButton = findViewById(R.id.photoModeButton);
+        photoResolutionButton = findViewById(R.id.photoResolutionButton);
+        photoResolutionButton.setOnClickListener(v -> showPhotoResolutionDialog());
         photoModeButton.setOnClickListener(v -> showPhotoModeDialog());
         captureButton = findViewById(R.id.captureButton);
         videoButton = findViewById(R.id.videoButton);
@@ -181,6 +190,8 @@ public class MainActivity extends AppCompatActivity {
         folderStore = new FolderStore(this);
         cameraPreferences = getSharedPreferences(PREFS_CAMERA, MODE_PRIVATE);
         quickShotEnabled = cameraPreferences.getBoolean(PREF_QUICK_SHOT, false);
+        photoResolutionChoice = cameraPreferences.getInt(PREF_PHOTO_RESOLUTION, 0);
+        updatePhotoResolutionUi();
         updatePhotoModeUi();
         cameraToolsTab.setOnLongClickListener(v -> { showPhotoModeDialog(); return true; });
         setAdvancedControlsExpanded(cameraPreferences.getBoolean(PREF_TOOLS_EXPANDED, false), false);
@@ -301,6 +312,34 @@ public class MainActivity extends AppCompatActivity {
 
     /** Long-press the tools tab to choose the still-photo capture trade-off.
      *  Rebinding is never attempted during video recording. */
+    private void updatePhotoResolutionUi() {
+        if (photoResolutionButton == null) return;
+        String[] labels = {"อัตโนมัติ", "ประมาณ 12 MP", "ประมาณ 8 MP", "ประมาณ 2 MP"};
+        photoResolutionButton.setText("📐 ความละเอียดภาพ: " + labels[Math.max(0, Math.min(photoResolutionChoice, 3))]);
+    }
+
+    private void showPhotoResolutionDialog() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดบันทึกวิดีโอก่อนเปลี่ยนความละเอียด", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] choices = {"อัตโนมัติ (กล้องเลือก)", "ประมาณ 12 MP (4000×3000)",
+                "ประมาณ 8 MP (3264×2448)", "ประมาณ 2 MP (1920×1080)"};
+        new AlertDialog.Builder(this)
+                .setTitle("ความละเอียดภาพนิ่ง")
+                .setSingleChoiceItems(choices, photoResolutionChoice, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (photoResolutionChoice == which) return;
+                    photoResolutionChoice = which;
+                    cameraPreferences.edit().putInt(PREF_PHOTO_RESOLUTION, which).apply();
+                    updatePhotoResolutionUi();
+                    bindCameraUseCases();
+                    Toast.makeText(this, "เลือกขนาดเป้าหมายแล้ว • ขนาดจริงขึ้นกับกล้อง", Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
+    }
+
     private void updatePhotoModeUi() {
         if (photoModeButton != null) photoModeButton.setText(quickShotEnabled
                 ? "📷 โหมดภาพ: ถ่ายเร็ว (Quick Shot)" : "📷 โหมดภาพ: คุณภาพสูง");
@@ -523,11 +562,20 @@ public class MainActivity extends AppCompatActivity {
             Preview preview = new Preview.Builder().build();
             preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
-            imageCapture = new ImageCapture.Builder()
+            ImageCapture.Builder stillBuilder = new ImageCapture.Builder()
                     .setCaptureMode(quickShotEnabled
                             ? ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
-                            : ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                    .build();
+                            : ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY);
+            if (photoResolutionChoice > 0) {
+                Size preferred = photoResolutionChoice == 1 ? new Size(4000, 3000)
+                        : photoResolutionChoice == 2 ? new Size(3264, 2448)
+                        : new Size(1920, 1080);
+                stillBuilder.setResolutionSelector(new ResolutionSelector.Builder()
+                        .setResolutionStrategy(new ResolutionStrategy(preferred,
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                        .build());
+            }
+            imageCapture = stillBuilder.build();
 
             QualitySelector qualitySelector = QualitySelector.from(
                     Quality.FHD,
@@ -812,6 +860,14 @@ public class MainActivity extends AppCompatActivity {
                         statusText.setText("กำลังยืนยัน GPS ในภาพก่อนบันทึก...");
                     }
                     new Thread(() -> {
+                        BitmapFactory.Options imageBounds = new BitmapFactory.Options();
+                        imageBounds.inJustDecodeBounds = true;
+                        BitmapFactory.decodeFile(temporary.getAbsolutePath(), imageBounds);
+                        final String actualPixels = imageBounds.outWidth > 0 && imageBounds.outHeight > 0
+                                ? imageBounds.outWidth + "×" + imageBounds.outHeight + " (" +
+                                  String.format(Locale.US, "%.1f MP",
+                                          (imageBounds.outWidth * (double) imageBounds.outHeight) / 1000000.0) + ")"
+                                : "ไม่สามารถอ่านขนาดภาพได้";
                         CapturePhotoSaver.Result published = null;
                         String error = null;
                         try {
@@ -834,10 +890,10 @@ public class MainActivity extends AppCompatActivity {
                                 return;
                             }
                             if (!duringVideo || activeRecording == null) {
-                                statusText.setText("บันทึกภาพพร้อม GPS แล้ว ✓");
+                                statusText.setText("ภาพ " + actualPixels + " • GPS ✓");
                             }
                             showSaveBanner(duringVideo ? "ภาพระหว่างวิดีโอ • GPS ✓"
-                                    : "ภาพพร้อม GPS ✓", roomLabel);
+                                    : "ภาพ " + actualPixels + " • GPS ✓", roomLabel);
                             if (latestMediaView != null) {
                                 latestMediaView.postDelayed(latestMediaView::refresh, 450L);
                             }
