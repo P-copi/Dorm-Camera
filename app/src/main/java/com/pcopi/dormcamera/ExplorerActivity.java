@@ -978,25 +978,89 @@ public class ExplorerActivity extends AppCompatActivity {
             if (!folder.equals(current)) targets.add(folder);
         }
 
-        List<String> labels = new ArrayList<>();
-        for (String folder : targets) labels.add(FolderStore.displayName(folder));
-        labels.add("＋ สร้างโฟลเดอร์ใหม่...");
-        labels.add("＋ สร้างซับโฟลเดอร์ในโฟลเดอร์ปัจจุบัน...");
+        // Show the same folder hierarchy used by the folder picker.
+        // Search the full path, but transfer only to the selected original path.
+        List<String> visiblePaths = new ArrayList<>(targets);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        int inset = Math.round(16 * getResources().getDisplayMetrics().density);
+        content.setPadding(inset, 0, inset, 0);
+
+        EditText search = new EditText(this);
+        search.setSingleLine(true);
+        search.setHint("🔎 ค้นหาโฟลเดอร์ปลายทาง");
+        content.addView(search);
+
+        TextView count = new TextView(this);
+        count.setPadding(0, 8, 0, 8);
+        content.addView(count);
+
+        ListView list = new ListView(this);
+        content.addView(list, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        Button createFolder = new Button(this);
+        createFolder.setText("＋ สร้างโฟลเดอร์ใหม่");
+        content.addView(createFolder);
+        Button createChild = new Button(this);
+        createChild.setText("＋ สร้างซับโฟลเดอร์ในโฟลเดอร์ปัจจุบัน");
+        content.addView(createChild);
+
+        final Runnable refresh = () -> {
+            visiblePaths.clear();
+            String query = search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            List<String> labels = new ArrayList<>();
+            for (String folder : targets) {
+                String full = FolderStore.displayName(folder);
+                if (!query.isEmpty() && !full.toLowerCase(Locale.ROOT).contains(query)
+                        && !folder.toLowerCase(Locale.ROOT).contains(query)) continue;
+                visiblePaths.add(folder);
+                int depth = folder.isEmpty() ? 0 : folder.split("/").length - 1;
+                StringBuilder label = new StringBuilder();
+                for (int i = 0; i < Math.min(depth, 5); i++) label.append("  ");
+                label.append(depth == 0 ? "📁 " : "📂 ");
+                label.append(full);
+                labels.add(label.toString());
+            }
+            count.setText("พบ " + visiblePaths.size() + " โฟลเดอร์");
+            list.setAdapter(new ArrayAdapter<>(this,
+                    android.R.layout.simple_list_item_1, labels));
+        };
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence text, int start, int before, int count) {
+                refresh.run();
+            }
+            @Override public void afterTextChanged(Editable text) { }
+        });
 
         String title = move ? "ย้ายไปโฟลเดอร์" : "คัดลอกไปโฟลเดอร์";
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(title)
-                .setItems(labels.toArray(new String[0]), (dialog, which) -> {
-                    if (which == targets.size()) {
-                        promptNewDestination(move, false);
-                    } else if (which == targets.size() + 1) {
-                        promptNewDestination(move, true);
-                    } else {
-                        confirmTransfer(move, targets.get(which));
-                    }
-                })
+                .setView(content)
                 .setNegativeButton("ยกเลิก", null)
-                .show();
+                .create();
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            if (position < 0 || position >= visiblePaths.size()) return;
+            String destination = visiblePaths.get(position);
+            dialog.dismiss();
+            confirmTransfer(move, destination);
+        });
+        createFolder.setOnClickListener(v -> {
+            dialog.dismiss();
+            promptNewDestination(move, false);
+        });
+        createChild.setOnClickListener(v -> {
+            dialog.dismiss();
+            promptNewDestination(move, true);
+        });
+        refresh.run();
+        dialog.setOnShowListener(ignored -> {
+            android.view.Window window = dialog.getWindow();
+            if (window != null) window.setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        });
+        dialog.show();
     }
 
     private void promptNewDestination(boolean move, boolean nested) {
