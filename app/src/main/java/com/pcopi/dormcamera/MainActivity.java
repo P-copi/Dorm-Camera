@@ -134,6 +134,8 @@ public class MainActivity extends AppCompatActivity {
     private SharedPreferences cameraPreferences;
     private MediaActionSound shutterSound;
     private boolean shutterSoundEnabled = true;
+    private static final String PREF_QUICK_SHOT = "quick_shot_enabled";
+    private boolean quickShotEnabled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -175,6 +177,8 @@ public class MainActivity extends AppCompatActivity {
         locationHelper = new LocationHelper(this);
         folderStore = new FolderStore(this);
         cameraPreferences = getSharedPreferences(PREFS_CAMERA, MODE_PRIVATE);
+        quickShotEnabled = cameraPreferences.getBoolean(PREF_QUICK_SHOT, false);
+        cameraToolsTab.setOnLongClickListener(v -> { showPhotoModeDialog(); return true; });
         setAdvancedControlsExpanded(cameraPreferences.getBoolean(PREF_TOOLS_EXPANDED, false), false);
         shutterSoundEnabled = cameraPreferences.getBoolean(PREF_SHUTTER_SOUND, true);
         shutterSound = new MediaActionSound();
@@ -289,6 +293,31 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
         ViewCompat.requestApplyInsets(root);
+    }
+
+    /** Long-press the tools tab to choose the still-photo capture trade-off.
+     *  Rebinding is never attempted during video recording. */
+    private void showPhotoModeDialog() {
+        if (activeRecording != null) {
+            Toast.makeText(this, "หยุดบันทึกวิดีโอก่อนเปลี่ยนโหมดภาพ", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] modes = {"คุณภาพสูง (Quality)", "ถ่ายเร็ว (Quick Shot)"};
+        new AlertDialog.Builder(this)
+                .setTitle("โหมดถ่ายภาพนิ่ง")
+                .setSingleChoiceItems(modes, quickShotEnabled ? 1 : 0, (dialog, which) -> {
+                    boolean quick = which == 1;
+                    dialog.dismiss();
+                    if (quickShotEnabled == quick) return;
+                    quickShotEnabled = quick;
+                    cameraPreferences.edit().putBoolean(PREF_QUICK_SHOT, quick).apply();
+                    bindCameraUseCases();
+                    Toast.makeText(this, quick
+                            ? "เปิดโหมดถ่ายเร็ว • ลดเวลารอชัตเตอร์"
+                            : "เปิดโหมดคุณภาพสูง", Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("ยกเลิก", null)
+                .show();
     }
 
     private void toggleAdvancedControls() {
@@ -485,7 +514,9 @@ public class MainActivity extends AppCompatActivity {
             preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
             imageCapture = new ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .setCaptureMode(quickShotEnabled
+                            ? ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
+                            : ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                     .build();
 
             QualitySelector qualitySelector = QualitySelector.from(
