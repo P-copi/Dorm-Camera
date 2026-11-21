@@ -1215,59 +1215,101 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "หยุดวิดีโอก่อนเปลี่ยนห้อง", Toast.LENGTH_SHORT).show();
             return;
         }
-
         List<String> folders = folderStore.getKnownFolders();
         String current = folderStore.getCurrentFolder();
-        List<String> labels = new ArrayList<>();
-        for (String folder : folders) {
-            String name = FolderStore.displayName(folder);
-            labels.add(folder.equals(current) ? "📂  " + name + "  ✓ ปัจจุบัน" : "📁  " + name);
-        }
-        labels.add("＋  📁  สร้างโฟลเดอร์ใหม่...");
-        labels.add("＋  📂  สร้างซับโฟลเดอร์ในตำแหน่งปัจจุบัน...");
-        labels.add("↰  กลับไปโฟลเดอร์แม่");
-
         boolean locked = folderStore.isLocked();
+
+        android.widget.LinearLayout panel = new android.widget.LinearLayout(this);
+        panel.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = Math.round(12 * getResources().getDisplayMetrics().density);
+        panel.setPadding(pad, 0, pad, 0);
+        EditText search = new EditText(this);
+        search.setSingleLine(true);
+        search.setTextSize(15f);
+        search.setHint("🔎 ค้นหาชื่อโฟลเดอร์...");
+        search.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        panel.addView(search, new android.widget.LinearLayout.LayoutParams(-1,
+                Math.round(48 * getResources().getDisplayMetrics().density)));
+        TextView count = new TextView(this);
+        count.setTextSize(12f);
+        panel.addView(count);
+        android.widget.ListView list = new android.widget.ListView(this);
+        panel.addView(list, new android.widget.LinearLayout.LayoutParams(-1, 0, 1f));
+        List<String> visiblePaths = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+                this, android.R.layout.simple_list_item_1, labels);
+        list.setAdapter(adapter);
+        Runnable refresh = () -> {
+            String needle = search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            visiblePaths.clear();
+            labels.clear();
+            for (String folder : folders) {
+                String name = FolderStore.displayName(folder);
+                if (!name.toLowerCase(Locale.ROOT).contains(needle)) continue;
+                visiblePaths.add(folder);
+                labels.add(folder.equals(current) ? "📂  " + name + "  ✓ ปัจจุบัน" : "📁  " + name);
+            }
+            count.setText("พบ " + visiblePaths.size() + " โฟลเดอร์");
+            // Keep folder-management actions visible even when a search has no matches.
+            labels.add("＋  📁  สร้างโฟลเดอร์ใหม่...");
+            labels.add("＋  📂  สร้างซับโฟลเดอร์ในตำแหน่งปัจจุบัน...");
+            labels.add("↰  กลับไปโฟลเดอร์แม่");
+            adapter.notifyDataSetChanged();
+        };
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { refresh.run(); }
+            @Override public void afterTextChanged(android.text.Editable s) { }
+        });
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("เปลี่ยนห้องด่วน • ปัจจุบัน: " + FolderStore.displayName(current) + (locked ? " 🔒" : ""))
-                .setItems(labels.toArray(new String[0]), (d, which) -> {
-                    if (which == folders.size()) {
-                        if (locked) {
-                            Toast.makeText(this, "โฟลเดอร์ถูกล็อก กรุณาปลดล็อกก่อนสร้างใหม่", Toast.LENGTH_LONG).show();
-                        } else {
-                            showCreateFolderDialog();
-                        }
-                        return;
-                    }
-
-                    if (which == folders.size() + 1) {
-                        showCreateSubfolderDialog();
-                        return;
-                    }
-                    if (which == folders.size() + 2) {
-                        String parent = FolderStore.parentPath(current);
-                        if (locked) confirmUnlockAndSwitch(parent);
-                        else {
-                            folderStore.setCurrentFolder(parent);
-                            updateCameraStatus();
-                            refreshLatestMedia();
-                        }
-                        return;
-                    }
-                    String target = folders.get(which);
-                    if (target.equals(current)) return;
-                    if (locked) {
-                        confirmUnlockAndSwitch(target);
-                    } else {
-                        folderStore.setCurrentFolder(target);
-                        updateCameraStatus();
-                        refreshLatestMedia();
-                        Toast.makeText(this, "เปลี่ยนเป็น: " + FolderStore.displayName(target), Toast.LENGTH_SHORT).show();
-                    }
-                })
+                .setView(panel)
                 .setNegativeButton("ยกเลิก", null)
                 .create();
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            int folderCount = visiblePaths.size();
+            if (position == folderCount) {
+                dialog.dismiss();
+                if (locked) Toast.makeText(this, "โฟลเดอร์ถูกล็อก กรุณาปลดล็อกก่อนสร้างใหม่", Toast.LENGTH_LONG).show();
+                else showCreateFolderDialog();
+                return;
+            }
+            if (position == folderCount + 1) {
+                dialog.dismiss();
+                showCreateSubfolderDialog();
+                return;
+            }
+            if (position == folderCount + 2) {
+                dialog.dismiss();
+                String parentFolder = FolderStore.parentPath(current);
+                if (locked) confirmUnlockAndSwitch(parentFolder);
+                else {
+                    folderStore.setCurrentFolder(parentFolder);
+                    updateCameraStatus();
+                    refreshLatestMedia();
+                }
+                return;
+            }
+            String target = visiblePaths.get(position);
+            dialog.dismiss();
+            if (target.equals(current)) return;
+            if (locked) confirmUnlockAndSwitch(target);
+            else {
+                folderStore.setCurrentFolder(target);
+                updateCameraStatus();
+                refreshLatestMedia();
+                Toast.makeText(this, "เปลี่ยนเป็น: " + FolderStore.displayName(target), Toast.LENGTH_SHORT).show();
+            }
+        });
+        refresh.run();
         dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            window.setLayout((int) (dm.widthPixels * 0.92f), (int) (dm.heightPixels * 0.78f));
+        }
     }
 
     private void confirmUnlockAndSwitch(@NonNull String target) {
