@@ -331,7 +331,7 @@ public class PreviewActivity extends AppCompatActivity {
         imageView.setAlpha(0.65f);
         imageLoader.submit(() -> {
             Bitmap bitmap = decodePreview(uri);
-            if (bitmap != null) imageCache.put(key, bitmap);
+            if (bitmap != null && bitmap.getByteCount() <= 12 * 1024 * 1024) imageCache.put(key, bitmap);
             runOnUiThread(() -> {
                 if (request != imageRequest || isFinishing()) return;
                 if (bitmap == null) {
@@ -344,17 +344,41 @@ public class PreviewActivity extends AppCompatActivity {
         });
     }
 
+    /** Decode the original image, not a MediaStore thumbnail.
+     *  Bound the longest edge to 4096px to avoid OOM on 50/108 MP files.
+     *  ImageDecoder also honors embedded JPEG orientation on Android 9+.
+     */
     private Bitmap decodePreview(Uri uri) {
+        final int maxEdge = 4096;
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                return getContentResolver().loadThumbnail(uri, new Size(1920, 1920), null);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                android.graphics.ImageDecoder.Source source =
+                        android.graphics.ImageDecoder.createSource(getContentResolver(), uri);
+                return android.graphics.ImageDecoder.decodeBitmap(source, (decoder, info, sourceInfo) -> {
+                    int width = info.getSize().getWidth();
+                    int height = info.getSize().getHeight();
+                    int sample = 1;
+                    while (Math.max(width / sample, height / sample) > maxEdge) sample *= 2;
+                    decoder.setTargetSampleSize(sample);
+                    decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);
+                });
             }
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                BitmapFactory.decodeStream(in, null, bounds);
+            }
+            int sample = 1;
+            while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > maxEdge) sample *= 2;
             BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inSampleSize = 2;
+            options.inSampleSize = sample;
             try (InputStream in = getContentResolver().openInputStream(uri)) {
                 return BitmapFactory.decodeStream(in, null, options);
             }
-        } catch (Exception e) { return null; }
+        } catch (Exception | OutOfMemoryError e) {
+            android.util.Log.w("DomePreview", "Original image decode failed", e);
+            return null;
+        }
     }
 
     private void showDecodedImage(Bitmap bitmap, int request) {
