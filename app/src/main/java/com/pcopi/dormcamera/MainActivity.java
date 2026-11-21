@@ -1217,13 +1217,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         List<String> folders = folderStore.getKnownFolders();
-        List<String> labels = new ArrayList<>();
-        for (String folder : folders) labels.add(FolderStore.displayName(folder));
-        labels.add("+ สร้างโฟลเดอร์ใหม่...");
-        labels.add("📁 สร้างซับโฟลเดอร์ในตำแหน่งปัจจุบัน...");
-        labels.add("↰ กลับไปโฟลเดอร์แม่");
-
         String current = folderStore.getCurrentFolder();
+        List<String> labels = new ArrayList<>();
+        for (String folder : folders) {
+            String name = FolderStore.displayName(folder);
+            labels.add(folder.equals(current) ? "📂  " + name + "  ✓ ปัจจุบัน" : "📁  " + name);
+        }
+        labels.add("＋  📁  สร้างโฟลเดอร์ใหม่...");
+        labels.add("＋  📂  สร้างซับโฟลเดอร์ในตำแหน่งปัจจุบัน...");
+        labels.add("↰  กลับไปโฟลเดอร์แม่");
+
         boolean locked = folderStore.isLocked();
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("เปลี่ยนห้องด่วน • ปัจจุบัน: " + FolderStore.displayName(current) + (locked ? " 🔒" : ""))
