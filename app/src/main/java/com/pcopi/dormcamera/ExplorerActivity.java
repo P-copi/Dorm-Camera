@@ -997,7 +997,8 @@ public class ExplorerActivity extends AppCompatActivity {
 
         ListView list = new ListView(this);
         content.addView(list, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.round(330 * getResources().getDisplayMetrics().density)));
 
         Button createFolder = new Button(this);
         createFolder.setText("＋ สร้างโฟลเดอร์ใหม่");
