@@ -85,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
     private final Runnable hideZoomHint = () -> {
         if (zoomText != null) zoomText.setVisibility(View.GONE);
     };
+    private Button photoModeButton;
     private Button captureButton;
     private Button videoButton;
     private Button videoPauseButton;
@@ -158,6 +159,8 @@ public class MainActivity extends AppCompatActivity {
         cameraToolsTab = findViewById(R.id.cameraToolsTab);
         cameraToolsTab.setOnClickListener(v -> toggleAdvancedControls());
         setAdvancedControlsExpanded(false, false);
+        photoModeButton = findViewById(R.id.photoModeButton);
+        photoModeButton.setOnClickListener(v -> showPhotoModeDialog());
         captureButton = findViewById(R.id.captureButton);
         videoButton = findViewById(R.id.videoButton);
         videoPauseButton = findViewById(R.id.videoPauseButton);
@@ -178,6 +181,7 @@ public class MainActivity extends AppCompatActivity {
         folderStore = new FolderStore(this);
         cameraPreferences = getSharedPreferences(PREFS_CAMERA, MODE_PRIVATE);
         quickShotEnabled = cameraPreferences.getBoolean(PREF_QUICK_SHOT, false);
+        updatePhotoModeUi();
         cameraToolsTab.setOnLongClickListener(v -> { showPhotoModeDialog(); return true; });
         setAdvancedControlsExpanded(cameraPreferences.getBoolean(PREF_TOOLS_EXPANDED, false), false);
         shutterSoundEnabled = cameraPreferences.getBoolean(PREF_SHUTTER_SOUND, true);
@@ -297,6 +301,11 @@ public class MainActivity extends AppCompatActivity {
 
     /** Long-press the tools tab to choose the still-photo capture trade-off.
      *  Rebinding is never attempted during video recording. */
+    private void updatePhotoModeUi() {
+        if (photoModeButton != null) photoModeButton.setText(quickShotEnabled
+                ? "📷 โหมดภาพ: ถ่ายเร็ว (Quick Shot)" : "📷 โหมดภาพ: คุณภาพสูง");
+    }
+
     private void showPhotoModeDialog() {
         if (activeRecording != null) {
             Toast.makeText(this, "หยุดบันทึกวิดีโอก่อนเปลี่ยนโหมดภาพ", Toast.LENGTH_SHORT).show();
@@ -310,6 +319,7 @@ public class MainActivity extends AppCompatActivity {
                     dialog.dismiss();
                     if (quickShotEnabled == quick) return;
                     quickShotEnabled = quick;
+                    updatePhotoModeUi();
                     cameraPreferences.edit().putBoolean(PREF_QUICK_SHOT, quick).apply();
                     bindCameraUseCases();
                     Toast.makeText(this, quick
